@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Limitless Leadership — CRM</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/dashboard.css?v=1780016402">
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="login-screen" style="display:none">
+  <div class="login-box">
+    <div class="login-header">
+      <div class="login-logo">
+        <img src="blanco.png" alt="Limitless Leadership">
+      </div>
+      <div class="login-brand">LIMITLESS LEADERSHIP</div>
+      <div class="login-tagline">People + Process = Profit</div>
+    </div>
+    <div class="login-body">
+      <div class="login-field">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="you@company.com" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div class="login-field">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="login-btn" onclick="doLogin()">SIGN IN</button>
+      <div class="login-error" id="login-error"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SIDEBAR OVERLAY -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="50" r="48" stroke="#0a0a0a" stroke-width="6" fill="none"/>
+        <path d="M25 20 L25 75 L65 75" stroke="#0a0a0a" stroke-width="8" stroke-linecap="square"/>
+        <path d="M35 45 L55 20 L55 75" stroke="#0a0a0a" stroke-width="8" stroke-linecap="square"/>
+        <path d="M35 62 L65 62" stroke="#0a0a0a" stroke-width="6" stroke-linecap="square"/>
+      </svg>
+    </div>
+    <div class="logo-name">LIMITLESS<br>LEADERSHIP</div>
+    <div class="logo-tagline">People + Process = Profit</div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="showPage('dashboard')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </div>
+
+    <div class="nav-section">Pipeline</div>
+    <div class="nav-item" onclick="showPage('contacts')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+      Contacts
+      <span class="nav-badge" id="nav-badge">—</span>
+    </div>
+    <div class="nav-item" onclick="showPage('outreach')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      Outreach
+    </div>
+    <div class="nav-item" onclick="showPage('appointments')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Appointments
+    </div>
+
+    <div class="nav-section">Sources</div>
+    <div class="nav-item" onclick="showPage('sync')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      Sync & Import
+    </div>
+
+    <div class="nav-section" id="nav-section-admin" style="display:none">Admin</div>
+    <div class="nav-item" id="nav-settings" onclick="showPage('settings')" style="display:none">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Settings
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="user-tag">
+      <div class="user-avatar" id="user-initial">D</div>
+      <div>
+        <div style="font-size:12px;color:var(--white);font-weight:500" id="user-name">Loading...</div>
+        <div style="font-size:10px;color:var(--muted)" id="user-role-label">—</div>
+      </div>
+    </div>
+    <button onclick="logout()" style="margin-top:10px;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:0;font-family:var(--font-body);">Sign out →</button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <div class="page-title" id="page-title">DASHBOARD</div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost" onclick="loadData()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        Refresh
+      </button>
+      <button class="btn btn-primary" onclick="openModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Contact
+      </button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- DASHBOARD PAGE -->
+    <div id="page-dashboard">
+      <div class="stats-row">
+        <div class="stat-card total">
+          <div class="stat-label">Total Contacts</div>
+          <div class="stat-value" id="stat-total">—</div>
+          <div class="stat-sub">In pipeline</div>
+        </div>
+        <div class="stat-card hot">
+          <div class="stat-label">Hot Leads</div>
+          <div class="stat-value" id="stat-hot">—</div>
+          <div class="stat-sub">Ready to close</div>
+        </div>
+        <div class="stat-card warm">
+          <div class="stat-label">Warm Leads</div>
+          <div class="stat-value" id="stat-warm">—</div>
+          <div class="stat-sub">Nurturing</div>
+        </div>
+        <div class="stat-card cold">
+          <div class="stat-label">Appointments</div>
+          <div class="stat-value" id="stat-appts">—</div>
+          <div class="stat-sub">Scheduled</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Recent Contacts -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">RECENT CONTACTS</div>
+            <button class="btn btn-ghost" onclick="showPage('contacts')" style="padding:5px 10px;font-size:11px">View All →</button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Contact</th>
+                <th>Score</th>
+                <th>Status</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="dashboard-contacts-body">
+              <tr><td colspan="4"><div class="skeleton" style="margin:16px 20px"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Upcoming Appointments -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">UPCOMING MEETINGS</div>
+          </div>
+          <div class="appt-list" id="dashboard-appts">
+            <div class="empty-state">
+              <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <p>No upcoming meetings</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Feed -->
+      <div class="activity-row">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">ACTIVITY FEED</div></div>
+          <div id="activity-feed">
+            <div class="empty-state"><p>No recent activity</p></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">PIPELINE OVERVIEW</div></div>
+          <div style="padding:20px">
+            <div id="pipeline-bars"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTACTS PAGE -->
+    <div id="page-contacts" style="display:none">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">ALL CONTACTS</div>
+          <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono)" id="contacts-count"></span>
+        </div>
+        <div class="filter-row">
+          <button class="filter-chip active" onclick="filterContacts('all', this)">All</button>
+          <button class="filter-chip" onclick="filterContacts('hot', this)">🔥 Hot</button>
+          <button class="filter-chip" onclick="filterContacts('warm', this)">🟡 Warm</button>
+          <button class="filter-chip" onclick="filterContacts('cold', this)">🔵 Cold</button>
+          <button class="filter-chip" onclick="filterContacts('pending', this)">Pending</button>
+          <button class="filter-chip" onclick="filterContacts('outreach_sent', this)">Contacted</button>
+          <input class="search-input" type="text" placeholder="Search contacts..." oninput="searchContacts(this.value)">
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Contact</th>
+              <th>Title</th>
+              <th>Score</th>
+              <th>Status</th>
+              <th>Source</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="contacts-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- OUTREACH PAGE -->
+    <div id="page-outreach" style="display:none">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">OUTREACH</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Contact</th>
+              <th>Subject</th>
+              <th>Status</th>
+              <th>Sent</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="outreach-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- APPOINTMENTS PAGE -->
+    <div id="page-appointments" style="display:none">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">APPOINTMENTS</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Contact</th>
+              <th>Scheduled</th>
+              <th>Assigned To</th>
+              <th>Status</th>
+              <th>AI Summary</th>
+            </tr>
+          </thead>
+          <tbody id="appointments-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SETTINGS PAGE -->
+    <div id="page-settings" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+        <!-- Create User -->
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">CREATE USER</div></div>
+          <div style="padding:20px">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">Add a new team member. They will use their email and password to log in.</p>
+            <div class="field" style="margin-bottom:12px">
+              <label>Full Name</label>
+              <input type="text" id="new-user-name" placeholder="John Smith">
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label>Email</label>
+              <input type="email" id="new-user-email" placeholder="john@company.com">
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label>Password</label>
+              <input type="password" id="new-user-password" placeholder="Min 8 characters">
+            </div>
+            <div class="field" style="margin-bottom:16px">
+              <label>Role</label>
+              <select id="new-user-role">
+                <option value="sales_rep">Sales Rep</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="createUser()" style="width:100%">Create User</button>
+            <div id="create-user-result" style="margin-top:10px;font-size:12px;font-family:var(--font-mono)"></div>
+          </div>
+        </div>
+
+        <!-- Users List -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">TEAM MEMBERS</div>
+            <button class="btn btn-ghost" onclick="loadUsers()" style="padding:5px 10px;font-size:11px">Refresh</button>
+          </div>
+          <div id="users-list" style="padding:0">
+            <div class="empty-state"><p>Loading...</p></div>
+          </div>
+        </div>
+
+        <!-- Change Password -->
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">CHANGE MY PASSWORD</div></div>
+          <div style="padding:20px">
+            <div class="field" style="margin-bottom:12px">
+              <label>Current Password</label>
+              <input type="password" id="cur-password" placeholder="Current password">
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label>New Password</label>
+              <input type="password" id="new-password" placeholder="New password">
+            </div>
+            <div class="field" style="margin-bottom:16px">
+              <label>Confirm New Password</label>
+              <input type="password" id="confirm-password" placeholder="Repeat new password">
+            </div>
+            <button class="btn btn-primary" onclick="changePassword()" style="width:100%">Update Password</button>
+            <div id="change-pw-result" style="margin-top:10px;font-size:12px;font-family:var(--font-mono)"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SYNC PAGE -->
+    <div id="page-sync" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">APOLLO PROSPECTING</div></div>
+          <div style="padding:20px">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">Search Apollo for new automotive executives. Set enrich=false to preview without spending credits.</p>
+            <div class="field" style="margin-bottom:12px">
+              <label>Region</label>
+              <input type="text" id="apollo-region" placeholder="e.g. California" value="California">
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label>Industry</label>
+              <input type="text" id="apollo-industry" placeholder="automotive" value="automotive">
+            </div>
+            <div class="field" style="margin-bottom:16px">
+              <label>Limit</label>
+              <input type="number" id="apollo-limit" value="10" min="1" max="25">
+            </div>
+            <button class="btn btn-primary" onclick="runApolloSearch()" style="width:100%">Search Apollo</button>
+            <div id="apollo-result" style="margin-top:12px;font-size:12px;color:var(--green);font-family:var(--font-mono)"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">KAJABI IMPORT</div></div>
+          <div style="padding:20px">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">Import all contacts from Kajabi into the CRM. Deduplication runs automatically.</p>
+            <button class="btn btn-primary" onclick="runKajabiImport()" style="width:100%">Import from Kajabi</button>
+            <div id="kajabi-result" style="margin-top:12px;font-size:12px;color:var(--muted);font-family:var(--font-mono)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- NEW CONTACT MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">NEW CONTACT</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <div class="field">
+          <label>First Name</label>
+          <input type="text" id="f-first" placeholder="John">
+        </div>
+        <div class="field">
+          <label>Last Name</label>
+          <input type="text" id="f-last" placeholder="Smith">
+        </div>
+        <div class="field full">
+          <label>Email *</label>
+          <input type="email" id="f-email" placeholder="john@dealer.com">
+        </div>
+        <div class="field">
+          <label>Title</label>
+          <input type="text" id="f-title" placeholder="VP Operations">
+        </div>
+        <div class="field">
+          <label>Company</label>
+          <input type="text" id="f-company" placeholder="Ford Dealership LA">
+        </div>
+        <div class="field">
+          <label>Industry</label>
+          <input type="text" id="f-industry" placeholder="Automotive" value="Automotive">
+        </div>
+        <div class="field">
+          <label>Region</label>
+          <input type="text" id="f-region" placeholder="California">
+        </div>
+        <div class="field">
+          <label>Source</label>
+          <select id="f-source">
+            <option value="manual">Manual</option>
+            <option value="kajabi">Kajabi</option>
+            <option value="clickfunnels">ClickFunnels</option>
+            <option value="apollo">Apollo</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createContact()">Create Contact</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTACT DETAIL PANEL -->
+<div class="detail-overlay" id="detail-overlay" onclick="closeDetail(event)">
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-header">
+      <div class="detail-avatar" id="d-avatar">—</div>
+      <div>
+        <div class="detail-name" id="d-name">—</div>
+        <div class="detail-title" id="d-title">—</div>
+      </div>
+      <button class="detail-close" onclick="closeDetailPanel()">×</button>
+    </div>
+    <div class="detail-body">
+      <div class="detail-section">
+        <div class="detail-section-title">Contact Info</div>
+        <div class="detail-row"><span class="detail-key">Email</span><span class="detail-val" id="d-email">—</span></div>
+        <div class="detail-row"><span class="detail-key">Company</span><span class="detail-val" id="d-company">—</span></div>
+        <div class="detail-row"><span class="detail-key">Region</span><span class="detail-val" id="d-region">—</span></div>
+        <div class="detail-row"><span class="detail-key">Source</span><span class="detail-val" id="d-source">—</span></div>
+        <div class="detail-row"><span class="detail-key">Score</span><span class="detail-val" id="d-score">—</span></div>
+        <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val" id="d-status">—</span></div>
+      </div>
+
+      <div class="detail-section" id="d-summary-section" style="display:none">
+        <div class="detail-section-title">AI Meeting Briefing</div>
+        <div class="ai-summary-box" id="d-summary"></div>
+      </div>
+
+      <div class="detail-actions">
+        <button class="btn btn-primary" id="d-generate-btn" onclick="generateOutreach()">Generate Outreach</button>
+        <button class="btn btn-ghost" onclick="simulateBooking()">Simulate Booking</button>
+        <button class="btn btn-ghost" onclick="enrichContact()">Enrich (Apollo)</button>
+      </div>
+
+      <div id="d-action-result" style="margin-top:12px;font-size:12px;color:var(--green);font-family:var(--font-mono);line-height:1.5"></div>
+      <textarea id="d-email-preview" style="display:none;margin-top:12px;background:var(--gray2);border:1px solid var(--border);border-radius:6px;padding:14px;font-size:12px;color:var(--muted);line-height:1.7;font-family:var(--font-body);width:100%;min-height:200px;resize:vertical;outline:none;" placeholder="Email body will appear here..."></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIFICATION -->
+<div class="notif" id="notif" style="display:none">
+  <div class="notif-dot"></div>
+  <div class="notif-text">
+    <strong id="notif-title">New appointment booked</strong>
+    <span id="notif-body">John Smith scheduled a meeting</span>
+  </div>
+  <button class="notif-close" onclick="this.parentElement.style.display='none'">×</button>
+</div>
+
+<script src="/static/dashboard.js?v=1780016402"></script>
+<!-- BOTTOM NAV (mobile) -->
+<nav class="bottom-nav">
+  <div class="bottom-nav-items">
+    <button class="bottom-nav-item active" onclick="showPageMobile('dashboard', this)">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="bottom-nav-item" onclick="showPageMobile('contacts', this)">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+      <span>Contacts</span>
+    </button>
+    <button class="bottom-nav-item" onclick="openModal()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      <span>Add</span>
+    </button>
+    <button class="bottom-nav-item" onclick="showPageMobile('outreach', this)">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      <span>Outreach</span>
+    </button>
+    <button class="bottom-nav-item" onclick="showPageMobile('appointments', this)">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Meetings</span>
+    </button>
+  </div>
+</nav>
+
+</body>
+</html>
