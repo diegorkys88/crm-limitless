@@ -4,16 +4,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from database import Base
-from sqlalchemy import create_engine
+from db_session import engine
 import os
 from dotenv import load_dotenv
 
 from routers import contacts, outreach, appointments, users, sync, webhooks, auth
 
 load_dotenv()
-
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./crm.db")
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
