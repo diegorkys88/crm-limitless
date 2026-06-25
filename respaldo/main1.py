@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
 
-from routers import contacts, outreach, appointments, users, sync, webhooks, auth
+from routers import contacts, outreach, appointments, users, sync, webhooks
 
 load_dotenv()
 
@@ -38,7 +38,6 @@ app.add_middleware(
 )
 
 # ── Routers ────────────────────────────────────────────────────────────────────
-app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
 app.include_router(contacts.router,     prefix="/contacts",     tags=["Contacts"])
 app.include_router(outreach.router,     prefix="/outreach",     tags=["Outreach"])
 app.include_router(appointments.router, prefix="/appointments", tags=["Appointments"])

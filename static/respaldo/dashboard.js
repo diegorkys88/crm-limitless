@@ -282,12 +282,6 @@ function renderAppointmentsTable() {
 }
 
 // ── CONTACT DETAIL ────────────────────────────────────────────────────────────
-function subscribedHTML(subscribed) {
-  if (subscribed === 'true')  return '<span style="color:var(--green)">✓ Subscribed</span>';
-  if (subscribed === 'false') return '<span style="color:var(--hot)">✗ Not subscribed</span>';
-  return '<span style="color:var(--muted)">— Unknown</span>';
-}
-
 function openDetail(id) {
   currentContact = allContacts.find(c => c.id === id);
   if (!currentContact) return;
@@ -297,14 +291,12 @@ function openDetail(id) {
   document.getElementById('d-name').textContent    = `${c.first_name || ''} ${c.last_name || ''}`;
   document.getElementById('d-title').textContent   = `${c.title || '—'} · ${c.company || '—'}`;
   document.getElementById('d-email').textContent   = c.email;
-  document.getElementById('d-company-input').value = c.company || '';
-  document.getElementById('d-region-input').value  = c.region || '';
+  document.getElementById('d-company').textContent = c.company || '—';
+  document.getElementById('d-region').textContent  = c.region || '—';
   document.getElementById('d-source').textContent  = c.source || '—';
-  document.getElementById('d-subscribed').innerHTML = subscribedHTML(c.subscribed);
   document.getElementById('d-score').innerHTML     = scoreHTML(c.score);
   document.getElementById('d-status').innerHTML    = statusHTML(c.status);
   document.getElementById('d-action-result').textContent = '';
-  document.getElementById('d-save-btn').style.display = 'none';
 
   // Check for AI summary
   const appt = allAppointments.find(a => a.contact_id === id && a.ai_summary);
@@ -316,45 +308,6 @@ function openDetail(id) {
   }
 
   document.getElementById('detail-overlay').classList.add('open');
-}
-
-function checkDetailDirty() {
-  if (!currentContact) return;
-  const companyChanged = document.getElementById('d-company-input').value !== (currentContact.company || '');
-  const regionChanged  = document.getElementById('d-region-input').value  !== (currentContact.region  || '');
-  document.getElementById('d-save-btn').style.display = (companyChanged || regionChanged) ? 'block' : 'none';
-}
-
-async function saveContactDetails() {
-  if (!currentContact) return;
-  const company = document.getElementById('d-company-input').value.trim();
-  const region  = document.getElementById('d-region-input').value.trim();
-  const btn     = document.getElementById('d-save-btn');
-
-  btn.disabled = true;
-  btn.textContent = 'Saving...';
-
-  try {
-    const r = await fetch(`${API}/contacts/${currentContact.id}`, {
-      method: 'PATCH',
-      headers: authHeaders(),
-      body: JSON.stringify({ company, region })
-    });
-    if (r.ok) {
-      showNotif('Saved', 'Contact details updated');
-      btn.style.display = 'none';
-      await loadData();
-      currentContact = allContacts.find(c => c.id === currentContact.id);
-    } else {
-      const d = await r.json();
-      showNotif('Error', d.detail || 'Could not save changes');
-    }
-  } catch (e) {
-    showNotif('Error', 'Connection error while saving');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Save Changes';
-  }
 }
 
 function closeDetail(e) {
@@ -543,18 +496,20 @@ async function runKajabiImport() {
   res.style.color = 'var(--muted)';
   res.textContent = limitInput
     ? `Importing up to ${limitInput} contacts from Kajabi...`
-    : 'Importing all contacts from Kajabi — this may take a moment...';
+    : 'Importing all 512 contacts from Kajabi — this may take a minute...';
 
   try {
+    // Use the /sync endpoint for small limits (waits for result)
+    // For "all contacts" (no limit), use background import + poll for completion
     if (limitInput && parseInt(limitInput) <= 100) {
-      // Small limit — use sync endpoint that waits for result
       const r = await fetch(`${API}/sync/kajabi/import/sync?limit=${limitInput}`, {
         method: 'POST', headers: authHeaders()
       });
       const d = await r.json();
+
       if (r.ok) {
         res.style.color = 'var(--green)';
-        res.textContent = `✓ Found: ${d.found} | Imported: ${d.imported} | Skipped (duplicates): ${d.skipped} | Total in Kajabi: ${d.meta?.total || '—'}`;
+        res.textContent = `✓ Found: ${d.found} | Imported: ${d.imported} | Skipped (duplicates): ${d.skipped}\nTotal in Kajabi: ${d.meta?.total || '—'}`;
         showNotif('Kajabi Import Complete', `${d.imported} new contacts added`);
         await loadData();
       } else {
@@ -562,16 +517,18 @@ async function runKajabiImport() {
         res.textContent = d.detail || 'Import failed';
       }
     } else {
-      // No limit or large — background import with polling
+      // Large import — runs in background
       const params = limitInput ? `?limit=${limitInput}` : '';
       const r = await fetch(`${API}/sync/kajabi/import${params}`, {
         method: 'POST', headers: authHeaders()
       });
       const d = await r.json();
+
       if (r.ok) {
-        res.textContent = 'Import running in background...';
-        const before = allContacts.filter(c => c.source === 'kajabi').length;
+        res.textContent = d.message || 'Import running in background...';
+        // Poll contacts count every 5s for up to 2 minutes to show progress
         let attempts = 0;
+        const before = allContacts.filter(c => c.source === 'kajabi').length;
         const poll = setInterval(async () => {
           attempts++;
           await loadData();
@@ -725,10 +682,6 @@ async function checkAuth() {
 }
 
 // ── START ─────────────────────────────────────────────────────────────────────
-// ── DETAIL FIELD LISTENERS ──────────────────────────────────────────────────
-document.getElementById('d-company-input')?.addEventListener('input', checkDetailDirty);
-document.getElementById('d-region-input')?.addEventListener('input', checkDetailDirty);
-
 checkAuth();
 setInterval(() => { if(getToken()) loadData(); }, 30000);
 

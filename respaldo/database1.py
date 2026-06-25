@@ -35,8 +35,6 @@ class Contact(Base):
     kajabi_id         = Column(String(100))
     clickfunnels_id   = Column(String(100))
     apollo_id         = Column(String(100))
-    # Marketing consent — from Kajabi's "subscribed" field
-    subscribed        = Column(String(10), default="unknown")  # true | false | unknown
 
     created_at        = Column(DateTime, server_default=func.now())
     updated_at        = Column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -72,11 +70,9 @@ class User(Base):
 
     id              = Column(String(36), primary_key=True, default=gen_uuid)
     name            = Column(String(255), nullable=False)
-    email           = Column(String(255), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=False)
+    email           = Column(String(255), unique=True, nullable=False)
     role            = Column(String(30), default="sales_rep")  # admin | sales_rep
-    calendar_id     = Column(String(255))
-    is_active       = Column(String(5), default="true")
+    calendar_id     = Column(String(255))  # Google Calendar ID for availability
 
     created_at      = Column(DateTime, server_default=func.now())
 

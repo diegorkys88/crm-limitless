@@ -195,7 +195,6 @@ def import_from_kajabi_sync(
             phone       = kc.get("phone"),
             source      = "kajabi",
             kajabi_id   = kc.get("kajabi_id"),
-            subscribed  = kc.get("subscribed", "unknown"),
             status      = "pending",
         )
         db.add(contact)
@@ -296,8 +295,7 @@ def _run_kajabi_import(limit):
             contact = Contact(
                 id=str(uuid.uuid4()), first_name=kc.get("first_name"),
                 last_name=kc.get("last_name"), email=email, phone=kc.get("phone"),
-                source="kajabi", kajabi_id=kc.get("kajabi_id"),
-                subscribed=kc.get("subscribed", "unknown"), status="pending",
+                source="kajabi", kajabi_id=kc.get("kajabi_id"), status="pending",
             )
             db.add(contact)
             db.add(SyncLog(

@@ -6,23 +6,6 @@
 <title>Limitless Leadership — CRM</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dashboard.css?v=1780016402">
-<style>
-  .detail-edit-input {
-    background: var(--gray2, #2a2a2a);
-    border: 1px solid var(--border, rgba(255,255,255,0.08));
-    color: var(--white, #f5f5f0);
-    padding: 4px 8px;
-    font-size: 12px;
-    font-family: var(--font-body, 'DM Sans', sans-serif);
-    border-radius: 3px;
-    outline: none;
-    text-align: right;
-    width: 160px;
-    transition: border-color 0.15s;
-  }
-  .detail-edit-input:focus { border-color: rgba(255,255,255,0.3); }
-  .detail-edit-input::placeholder { color: var(--muted, #888); }
-</style>
 </head>
 <body>
 
@@ -385,13 +368,9 @@
         <div class="panel">
           <div class="panel-header"><div class="panel-title">KAJABI IMPORT</div></div>
           <div style="padding:20px">
-            <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">Import contacts from Kajabi into the CRM. Deduplication runs automatically by email.</p>
-            <div class="field" style="margin-bottom:16px">
-              <label>Limit (leave empty for all contacts)</label>
-              <input type="number" id="kajabi-limit" placeholder="e.g. 50 — empty = all 512" min="1">
-            </div>
-            <button class="btn btn-primary" id="kajabi-import-btn" onclick="runKajabiImport()" style="width:100%">Import from Kajabi</button>
-            <div id="kajabi-result" style="margin-top:12px;font-size:12px;color:var(--muted);font-family:var(--font-mono);line-height:1.6"></div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">Import all contacts from Kajabi into the CRM. Deduplication runs automatically.</p>
+            <button class="btn btn-primary" onclick="runKajabiImport()" style="width:100%">Import from Kajabi</button>
+            <div id="kajabi-result" style="margin-top:12px;font-size:12px;color:var(--muted);font-family:var(--font-mono)"></div>
           </div>
         </div>
       </div>
@@ -470,19 +449,11 @@
       <div class="detail-section">
         <div class="detail-section-title">Contact Info</div>
         <div class="detail-row"><span class="detail-key">Email</span><span class="detail-val" id="d-email">—</span></div>
-        <div class="detail-row">
-          <span class="detail-key">Company</span>
-          <input type="text" id="d-company-input" class="detail-edit-input" placeholder="—">
-        </div>
-        <div class="detail-row">
-          <span class="detail-key">Region</span>
-          <input type="text" id="d-region-input" class="detail-edit-input" placeholder="—">
-        </div>
+        <div class="detail-row"><span class="detail-key">Company</span><span class="detail-val" id="d-company">—</span></div>
+        <div class="detail-row"><span class="detail-key">Region</span><span class="detail-val" id="d-region">—</span></div>
         <div class="detail-row"><span class="detail-key">Source</span><span class="detail-val" id="d-source">—</span></div>
-        <div class="detail-row"><span class="detail-key">Subscribed</span><span class="detail-val" id="d-subscribed">—</span></div>
         <div class="detail-row"><span class="detail-key">Score</span><span class="detail-val" id="d-score">—</span></div>
         <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val" id="d-status">—</span></div>
-        <button class="btn btn-ghost" id="d-save-btn" onclick="saveContactDetails()" style="width:100%;margin-top:10px;display:none">Save Changes</button>
       </div>
 
       <div class="detail-section" id="d-summary-section" style="display:none">

@@ -49,7 +49,6 @@ class ContactOut(BaseModel):
     kajabi_id:        Optional[str]
     clickfunnels_id:  Optional[str]
     apollo_id:        Optional[str]
-    subscribed:       Optional[str]
     created_at:       Optional[datetime]
 
     class Config:

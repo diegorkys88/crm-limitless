@@ -70,9 +70,11 @@ class User(Base):
 
     id              = Column(String(36), primary_key=True, default=gen_uuid)
     name            = Column(String(255), nullable=False)
-    email           = Column(String(255), unique=True, nullable=False)
+    email           = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
     role            = Column(String(30), default="sales_rep")  # admin | sales_rep
-    calendar_id     = Column(String(255))  # Google Calendar ID for availability
+    calendar_id     = Column(String(255))
+    is_active       = Column(String(5), default="true")
 
     created_at      = Column(DateTime, server_default=func.now())
 

@@ -534,68 +534,11 @@ async function runApolloSearch() {
 }
 
 async function runKajabiImport() {
-  const limitInput = document.getElementById('kajabi-limit').value;
-  const btn = document.getElementById('kajabi-import-btn');
   const res = document.getElementById('kajabi-result');
-
-  btn.disabled = true;
-  btn.textContent = 'Importing...';
-  res.style.color = 'var(--muted)';
-  res.textContent = limitInput
-    ? `Importing up to ${limitInput} contacts from Kajabi...`
-    : 'Importing all contacts from Kajabi — this may take a moment...';
-
-  try {
-    if (limitInput && parseInt(limitInput) <= 100) {
-      // Small limit — use sync endpoint that waits for result
-      const r = await fetch(`${API}/sync/kajabi/import/sync?limit=${limitInput}`, {
-        method: 'POST', headers: authHeaders()
-      });
-      const d = await r.json();
-      if (r.ok) {
-        res.style.color = 'var(--green)';
-        res.textContent = `✓ Found: ${d.found} | Imported: ${d.imported} | Skipped (duplicates): ${d.skipped} | Total in Kajabi: ${d.meta?.total || '—'}`;
-        showNotif('Kajabi Import Complete', `${d.imported} new contacts added`);
-        await loadData();
-      } else {
-        res.style.color = 'var(--hot)';
-        res.textContent = d.detail || 'Import failed';
-      }
-    } else {
-      // No limit or large — background import with polling
-      const params = limitInput ? `?limit=${limitInput}` : '';
-      const r = await fetch(`${API}/sync/kajabi/import${params}`, {
-        method: 'POST', headers: authHeaders()
-      });
-      const d = await r.json();
-      if (r.ok) {
-        res.textContent = 'Import running in background...';
-        const before = allContacts.filter(c => c.source === 'kajabi').length;
-        let attempts = 0;
-        const poll = setInterval(async () => {
-          attempts++;
-          await loadData();
-          const after = allContacts.filter(c => c.source === 'kajabi').length;
-          res.style.color = 'var(--green)';
-          res.textContent = `Importing... ${after - before} new Kajabi contacts so far`;
-          if (attempts >= 24) {
-            clearInterval(poll);
-            res.textContent = `✓ Import finished — ${after - before} new contacts added`;
-            showNotif('Kajabi Import Complete', `${after - before} new contacts added`);
-          }
-        }, 5000);
-      } else {
-        res.style.color = 'var(--hot)';
-        res.textContent = d.detail || 'Could not start import';
-      }
-    }
-  } catch (e) {
-    res.style.color = 'var(--hot)';
-    res.textContent = 'Connection error during import';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Import from Kajabi';
-  }
+  res.textContent = 'Starting import...';
+  const r = await fetch(`${API}/sync/kajabi/import`, {method:'POST', headers:authHeaders()});
+  const d = await r.json();
+  res.textContent = d.message || 'Import started';
 }
 
 // ── NOTIFICATION ──────────────────────────────────────────────────────────────
