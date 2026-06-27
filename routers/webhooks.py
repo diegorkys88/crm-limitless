@@ -291,31 +291,25 @@ async def simulate_clickfunnels(
 async def kajabi_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Kajabi fires this when a form is submitted.
-    Payload is an array: [form_submission_object, form_object]
+    Real payload format: {"event": "form_submission.created", "payload": {"Email": "...", "Name": "..."}}
     """
     payload = await request.json()
-    print(f"[Kajabi webhook] Raw payload: {payload}")
+    print(f"[Kajabi webhook] Received: {payload}")
 
-    # Payload is a list — find the form_submission item
-    submission = None
-    for item in payload:
-        if item.get("type") == "form_submissions":
-            submission = item
-            break
+    event = payload.get("event", "")
+    data  = payload.get("payload", {})
 
-    if not submission:
-        return {"status": "ignored", "reason": "no form_submission in payload"}
+    if event != "form_submission.created":
+        return {"status": "ignored", "event": event}
 
-    attrs = submission.get("attributes", {})
-    email = attrs.get("email")
-
+    email = data.get("Email") or data.get("email")
     if not email:
-        return {"status": "ignored", "reason": "no email in submission"}
+        return {"status": "ignored", "reason": "no email in payload"}
 
-    # Duplicate check
     from database import Contact, SyncLog
     import uuid
 
+    # Duplicate check
     existing = db.query(Contact).filter(Contact.email == email).first()
     if existing:
         db.add(SyncLog(
@@ -326,31 +320,32 @@ async def kajabi_webhook(request: Request, db: Session = Depends(get_db)):
         db.commit()
         return {"status": "duplicate", "contact_id": existing.id}
 
-    # Create new contact
-    full_name  = (attrs.get("name") or "").strip()
+    # Parse name
+    full_name  = (data.get("Name") or data.get("name") or "").strip()
     name_parts = full_name.split(" ", 1) if full_name else ["", ""]
 
     contact = Contact(
         id         = str(uuid.uuid4()),
-        first_name = attrs.get("first_name") or (name_parts[0] if name_parts else None),
-        last_name  = attrs.get("last_name")  or (name_parts[1] if len(name_parts) > 1 else None),
+        first_name = name_parts[0] if name_parts else None,
+        last_name  = name_parts[1] if len(name_parts) > 1 else None,
         email      = email,
-        phone      = attrs.get("phone_number") or attrs.get("mobile_phone_number"),
+        phone      = data.get("phone_number") or data.get("Phone"),
         source     = "kajabi",
         status     = "pending",
-        subscribed = "true",  # if they submitted a form they opted in
+        subscribed = "true",
     )
     db.add(contact)
     db.add(SyncLog(
         id=str(uuid.uuid4()), contact_id=contact.id,
         platform="kajabi", action="form_submitted",
-        tag="new_lead", status="success",
+        tag=data.get("form_title", "unknown_form"),
+        status="success",
     ))
     db.commit()
 
-    # Auto-classify with Claude in background
-    from agents.classifier import classifier_agent
+    # Auto-classify
     try:
+        from agents.classifier import classifier_agent
         classifier_agent.classify(contact, db)
     except Exception as e:
         print(f"[Kajabi webhook] Classifier error: {e}")
