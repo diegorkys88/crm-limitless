@@ -155,18 +155,16 @@ def import_from_kajabi(
 
 @router.post("/kajabi/import/sync")
 def import_from_kajabi_sync(
-    limit: int = Query(20, ge=1, le=100, description="Max contacts for this test run"),
+    limit: int = Query(100, ge=1, le=100),
+    page:  int = Query(1, ge=1),
     db: Session = Depends(get_db)
 ):
-    """
-    Same as above but waits for the result — use for testing with small limits.
-    """
     from services.kajabi import kajabi_service
     from database import Contact, SyncLog
     import uuid
 
     try:
-        kajabi_contacts, meta = kajabi_service.list_contacts(page=1, page_size=limit)
+        kajabi_contacts, meta = kajabi_service.list_contacts(page=page, page_size=limit)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Kajabi error: {str(e)}")
 
@@ -181,22 +179,21 @@ def import_from_kajabi_sync(
 
         existing = db.query(Contact).filter(Contact.email == email).first()
         if existing:
-            # Update kajabi_id if missing
             if not existing.kajabi_id:
                 existing.kajabi_id = kc.get("kajabi_id")
             skipped += 1
             continue
 
         contact = Contact(
-            id          = str(uuid.uuid4()),
-            first_name  = kc.get("first_name"),
-            last_name   = kc.get("last_name"),
-            email       = email,
-            phone       = kc.get("phone"),
-            source      = "kajabi",
-            kajabi_id   = kc.get("kajabi_id"),
-            subscribed  = kc.get("subscribed", "unknown"),
-            status      = "pending",
+            id         = str(uuid.uuid4()),
+            first_name = kc.get("first_name"),
+            last_name  = kc.get("last_name"),
+            email      = email,
+            phone      = kc.get("phone"),
+            source     = "kajabi",
+            kajabi_id  = kc.get("kajabi_id"),
+            subscribed = kc.get("subscribed", "unknown"),
+            status     = "pending",
         )
         db.add(contact)
         db.add(SyncLog(

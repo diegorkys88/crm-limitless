@@ -11,7 +11,7 @@ async function loadData() {
   try {
     const h = authHeaders();
     const [contacts, appts, outreach] = await Promise.all([
-      fetch(`${API}/contacts/?limit=100`, {headers:h}).then(r => r.json()),
+      fetch(`${API}/contacts/?limit=1000`, {headers:h}).then(r => r.json()),
       fetch(`${API}/appointments/`, {headers:h}).then(r => r.json()),
       fetch(`${API}/outreach/`, {headers:h}).then(r => r.json()),
     ]);
@@ -55,7 +55,7 @@ function showPage(page) {
   const navItem = document.querySelector(`.nav-item[onclick="showPage('${page}')"]`);
   if (navItem) navItem.classList.add('active');
 
-  if (page === 'contacts')     renderContactsTable(allContacts);
+  if (page === 'contacts')     { currentContactPage = 1; renderContactsTable(allContacts, true); }
   if (page === 'outreach')     renderOutreachTable();
   if (page === 'appointments') renderAppointmentsTable();
   if (page === 'settings')     loadUsers();
@@ -181,15 +181,29 @@ function renderPipelineBars() {
 // ── CONTACTS TABLE ────────────────────────────────────────────────────────────
 let currentFilter = 'all';
 let currentSearch = '';
+let currentContactPage = 1;
+const CONTACTS_PER_PAGE = 50;
 
-function renderContactsTable(contacts) {
-  const tbody = document.getElementById('contacts-body');
-  document.getElementById('contacts-count').textContent = `${contacts.length} contacts`;
-  if (!contacts.length) {
+function renderContactsTable(contacts, resetPage = false) {
+  if (resetPage) currentContactPage = 1;
+
+  const tbody    = document.getElementById('contacts-body');
+  const total    = contacts.length;
+  const pages    = Math.ceil(total / CONTACTS_PER_PAGE);
+  const start    = (currentContactPage - 1) * CONTACTS_PER_PAGE;
+  const end      = Math.min(start + CONTACTS_PER_PAGE, total);
+  const paginated = contacts.slice(start, end);
+
+  document.getElementById('contacts-count').textContent =
+    `${total} contacts — page ${currentContactPage} of ${pages || 1}`;
+
+  if (!paginated.length) {
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No contacts found</p></div></td></tr>`;
+    renderPagination(contacts, 0);
     return;
   }
-  tbody.innerHTML = contacts.map(c => `
+
+  tbody.innerHTML = paginated.map(c => `
     <tr onclick="openDetail('${c.id}')" class="fade-in">
       <td><div class="contact-cell">
         <div class="contact-avatar" style="background:${avatarColor(c.id)}">${initials(c)}</div>
@@ -202,10 +216,54 @@ function renderContactsTable(contacts) {
       <td><span class="source-tag">${c.source || '—'}</span></td>
       <td><button class="action-btn" onclick="event.stopPropagation();generateOutreachFor('${c.id}')">Outreach</button></td>
     </tr>`).join('');
+
+  renderPagination(contacts, pages);
+}
+
+function renderPagination(contacts, pages) {
+  // Remove existing pagination
+  const existing = document.getElementById('contacts-pagination');
+  if (existing) existing.remove();
+
+  if (pages <= 1) return;
+
+  const panel = document.querySelector('#page-contacts .panel');
+  const pag = document.createElement('div');
+  pag.id = 'contacts-pagination';
+  pag.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 20px;border-top:1px solid var(--border)';
+
+  const prevDisabled = currentContactPage <= 1 ? 'disabled style="opacity:0.4;cursor:default"' : '';
+  const nextDisabled = currentContactPage >= pages ? 'disabled style="opacity:0.4;cursor:default"' : '';
+
+  // Show max 5 page buttons around current page
+  let pageButtons = '';
+  const start = Math.max(1, currentContactPage - 2);
+  const end   = Math.min(pages, currentContactPage + 2);
+
+  if (start > 1) pageButtons += `<button class="action-btn" onclick="goToContactPage(1, event)">1</button><span style="color:var(--muted)">…</span>`;
+  for (let i = start; i <= end; i++) {
+    const active = i === currentContactPage ? 'style="background:var(--white);color:var(--black);border-color:var(--white)"' : '';
+    pageButtons += `<button class="action-btn" ${active} onclick="goToContactPage(${i}, event)">${i}</button>`;
+  }
+  if (end < pages) pageButtons += `<span style="color:var(--muted)">…</span><button class="action-btn" onclick="goToContactPage(${pages}, event)">${pages}</button>`;
+
+  pag.innerHTML = `
+    <button class="action-btn" ${prevDisabled} onclick="goToContactPage(${currentContactPage - 1}, event)">← Prev</button>
+    ${pageButtons}
+    <button class="action-btn" ${nextDisabled} onclick="goToContactPage(${currentContactPage + 1}, event)">Next →</button>
+  `;
+  panel.appendChild(pag);
+}
+
+function goToContactPage(page, event) {
+  if (event) event.stopPropagation();
+  currentContactPage = page;
+  applyFilters();
 }
 
 function filterContacts(filter, el) {
   currentFilter = filter;
+  currentContactPage = 1;
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   applyFilters();
@@ -213,6 +271,7 @@ function filterContacts(filter, el) {
 
 function searchContacts(val) {
   currentSearch = val.toLowerCase();
+  currentContactPage = 1;
   applyFilters();
 }
 
@@ -541,54 +600,51 @@ async function runKajabiImport() {
   btn.disabled = true;
   btn.textContent = 'Importing...';
   res.style.color = 'var(--muted)';
-  res.textContent = limitInput
-    ? `Importing up to ${limitInput} contacts from Kajabi...`
-    : 'Importing all contacts from Kajabi — this may take a moment...';
+
+  const limit = limitInput ? parseInt(limitInput) : null;
+  let totalImported = 0;
+  let totalSkipped  = 0;
+  let totalFound    = 0;
+  let page = 1;
+  const pageSize = 100;
 
   try {
-    if (limitInput && parseInt(limitInput) <= 100) {
-      // Small limit — use sync endpoint that waits for result
-      const r = await fetch(`${API}/sync/kajabi/import/sync?limit=${limitInput}`, {
+    while (true) {
+      const batchLimit = limit ? Math.min(pageSize, limit - totalFound) : pageSize;
+      if (batchLimit <= 0) break;
+
+      res.textContent = `Importing page ${page}... (${totalImported} imported so far)`;
+
+      const r = await fetch(`${API}/sync/kajabi/import/sync?limit=${batchLimit}&page=${page}`, {
         method: 'POST', headers: authHeaders()
       });
       const d = await r.json();
-      if (r.ok) {
-        res.style.color = 'var(--green)';
-        res.textContent = `✓ Found: ${d.found} | Imported: ${d.imported} | Skipped (duplicates): ${d.skipped} | Total in Kajabi: ${d.meta?.total || '—'}`;
-        showNotif('Kajabi Import Complete', `${d.imported} new contacts added`);
-        await loadData();
-      } else {
+
+      if (!r.ok) {
         res.style.color = 'var(--hot)';
         res.textContent = d.detail || 'Import failed';
+        break;
       }
-    } else {
-      // No limit or large — background import with polling
-      const params = limitInput ? `?limit=${limitInput}` : '';
-      const r = await fetch(`${API}/sync/kajabi/import${params}`, {
-        method: 'POST', headers: authHeaders()
-      });
-      const d = await r.json();
-      if (r.ok) {
-        res.textContent = 'Import running in background...';
-        const before = allContacts.filter(c => c.source === 'kajabi').length;
-        let attempts = 0;
-        const poll = setInterval(async () => {
-          attempts++;
-          await loadData();
-          const after = allContacts.filter(c => c.source === 'kajabi').length;
-          res.style.color = 'var(--green)';
-          res.textContent = `Importing... ${after - before} new Kajabi contacts so far`;
-          if (attempts >= 24) {
-            clearInterval(poll);
-            res.textContent = `✓ Import finished — ${after - before} new contacts added`;
-            showNotif('Kajabi Import Complete', `${after - before} new contacts added`);
-          }
-        }, 5000);
-      } else {
-        res.style.color = 'var(--hot)';
-        res.textContent = d.detail || 'Could not start import';
-      }
+
+      totalFound    += d.found    || 0;
+      totalImported += d.imported || 0;
+      totalSkipped  += d.skipped  || 0;
+
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ Page ${page} done — ${totalImported} imported, ${totalSkipped} skipped so far`;
+
+    // Stop if no contacts returned or no more pages
+    if (!d.found || d.found === 0) break;
+    if (!d.meta?.has_next) break;
+    if (limit && totalFound >= limit) break;
+
+      page++;
     }
+
+    res.textContent = `✓ Import complete — Found: ${totalFound} | Imported: ${totalImported} | Skipped: ${totalSkipped}`;
+    showNotif('Kajabi Import Complete', `${totalImported} new contacts added`);
+    await loadData();
+
   } catch (e) {
     res.style.color = 'var(--hot)';
     res.textContent = 'Connection error during import';
