@@ -294,7 +294,7 @@ async def kajabi_webhook(request: Request, db: Session = Depends(get_db)):
     Payload is an array: [form_submission_object, form_object]
     """
     payload = await request.json()
-     print(f"[Kajabi webhook] Raw payload: {payload}")
+    print(f"[Kajabi webhook] Raw payload: {payload}")
 
     # Payload is a list — find the form_submission item
     submission = None
