@@ -495,10 +495,6 @@
         <button class="btn btn-ghost" onclick="simulateBooking()">Simulate Booking</button>
         <button class="btn btn-ghost" onclick="enrichContact()">Enrich (Apollo)</button>
       </div>
-      <div class="detail-actions" style="margin-top:8px">
-        <button class="btn btn-ghost" onclick="closeContact('won')" style="color:var(--green);border-color:rgba(46,204,113,0.5)">✓ Close Won</button>
-        <button class="btn btn-ghost" onclick="closeContact('lost')" style="color:var(--hot);border-color:rgba(255,77,46,0.5)">✗ Close Lost</button>
-      </div>
 
       <div id="d-action-result" style="margin-top:12px;font-size:12px;color:var(--green);font-family:var(--font-mono);line-height:1.5"></div>
       <textarea id="d-email-preview" style="display:none;margin-top:12px;background:var(--gray2);border:1px solid var(--border);border-radius:6px;padding:14px;font-size:12px;color:var(--muted);line-height:1.7;font-family:var(--font-body);width:100%;min-height:200px;resize:vertical;outline:none;" placeholder="Email body will appear here..."></textarea>

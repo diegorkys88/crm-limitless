@@ -133,20 +133,6 @@ def send_outreach(
     ))
     db.commit()
 
-    # Add crm-contacted tag in Kajabi if contact has kajabi_id
-    if contact.kajabi_id:
-        try:
-            from services.kajabi import kajabi_service
-            kajabi_service.tag_contact_by_name(contact.kajabi_id, "crm-contacted")
-            db.add(SyncLog(
-                id=str(uuid.uuid4()), contact_id=contact.id,
-                platform="kajabi", action="add_tag",
-                tag="crm-contacted", status="success",
-            ))
-            db.commit()
-        except Exception as e:
-            print(f"[Kajabi tag] crm-contacted error: {e}")
-
     return {
         "status":     "sent",
         "outreach_id": outreach_id,

@@ -893,6 +893,44 @@ async function changePassword() {
   }
 }
 
+// ── CLOSE CONTACT ────────────────────────────────────────────────────────────
+async function closeContact(result) {
+  if (!currentContact) return;
+  const label = result === 'won' ? 'Close Won' : 'Close Lost';
+  if (!confirm(`Mark ${currentContact.first_name} ${currentContact.last_name} as ${label}?`)) return;
+
+  const res = document.getElementById('d-action-result');
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Updating...';
+
+  try {
+    // Update status in CRM
+    const newStatus = result === 'won' ? 'closed_won' : 'closed_lost';
+    const r = await fetch(`${API}/contacts/${currentContact.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({status: newStatus})
+    });
+
+    if (r.ok) {
+      // Add crm-closed tag in Kajabi
+      if (result === 'won') {
+        await fetch(`${API}/sync/kajabi/tag/${currentContact.id}?tag_name=crm-closed`, {
+          method: 'POST', headers: authHeaders()
+        });
+      }
+      res.style.color = result === 'won' ? 'var(--green)' : 'var(--hot)';
+      res.textContent = `✓ Marked as ${label}`;
+      showNotif(label, `${currentContact.first_name} ${currentContact.last_name} — ${label}`);
+      await loadData();
+      closeDetailPanel();
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Error updating contact';
+  }
+}
+
 // ── MOBILE ────────────────────────────────────────────────────────────────────
 function toggleSidebar() {
   document.querySelector('.sidebar').classList.toggle('open');
