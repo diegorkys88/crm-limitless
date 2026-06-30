@@ -118,15 +118,53 @@ async def _handle_booking(data: dict, background_tasks: BackgroundTasks, db: Ses
             print(f"[Kajabi tag] crm-scheduled error: {e}")
 
     # Generate AI summary synchronously — avoids SQLite threading issues
+    summary = None
     try:
         from agents.scheduler import scheduler_agent
-        # Refresh objects after commit
         db.refresh(contact)
         db.refresh(appt)
-        scheduler_agent.generate_summary(contact, appt, db)
+        summary = scheduler_agent.generate_summary(contact, appt, db)
         print(f"[Scheduler] Summary generated for {contact.first_name} {contact.last_name}")
     except Exception as e:
         print(f"[Scheduler] Error generating summary: {e}")
+
+    # Send briefing email to assigned sales rep
+    if assigned_user and summary:
+        try:
+            from services.email import email_service
+            import os
+            scheduled_str = scheduled_at.strftime("%B %d, %Y at %I:%M %p") if scheduled_at else "TBD"
+            contact_name  = f"{contact.first_name or ''} {contact.last_name or ''}".strip() or contact.email
+            crm_url       = os.getenv("CRM_URL", "https://web-production-5bd62.up.railway.app/dashboard")
+
+            body = f"""Hi {assigned_user.name},
+
+You have a new meeting scheduled.
+
+Contact: {contact_name}
+Email: {contact.email}
+Scheduled: {scheduled_str}
+
+--- PRE-MEETING BRIEFING ---
+
+{summary}
+
+---
+
+View contact in CRM: {crm_url}
+
+The Leadership Coaching Team"""
+
+            email_service.send(
+                to_email    = assigned_user.email,
+                to_name     = assigned_user.name,
+                subject     = f"📅 Meeting scheduled — {contact_name} ({scheduled_str})",
+                body        = body,
+                sender_name = "Limitless Leadership CRM",
+            )
+            print(f"[Scheduler] Briefing email sent to {assigned_user.email}")
+        except Exception as e:
+            print(f"[Scheduler] Briefing email error: {e}")
 
     return {
         "status":         "booked",
