@@ -2,6 +2,7 @@ const API = window.location.hostname === 'localhost' || window.location.hostname
   ? 'http://127.0.0.1:8000'
   : `${window.location.protocol}//${window.location.host}`;
 let allContacts = [];
+let allUsers    = [];
 let allOutreach = [];
 let allAppointments = [];
 let currentContact = null;
@@ -10,11 +11,13 @@ let currentContact = null;
 async function loadData() {
   try {
     const h = authHeaders();
-    const [contacts, appts, outreach] = await Promise.all([
+    const [contacts, appts, outreach, users] = await Promise.all([
       fetch(`${API}/contacts/?limit=1000`, {headers:h}).then(r => r.json()),
       fetch(`${API}/appointments/`, {headers:h}).then(r => r.json()),
       fetch(`${API}/outreach/`, {headers:h}).then(r => r.json()),
+      fetch(`${API}/auth/users`, {headers:h}).then(r => r.json()).catch(() => []),
     ]);
+    allUsers = Array.isArray(users) ? users : [];
 
     allContacts    = contacts;
     allAppointments = appts;
@@ -70,26 +73,13 @@ function scoreHTML(score) {
 
 function statusHTML(status) {
   const map = {
-    // Contact statuses
     pending:               ['Pending',      'status-pending'],
     outreach_sent:         ['Contacted',    'status-sent'],
     appointment_scheduled: ['Meeting Set',  'status-scheduled'],
     closed_won:            ['Won ✓',        'status-sent'],
     closed_lost:           ['Lost',         'status-pending'],
-    // Outreach statuses
-    draft:                 ['Draft',        'status-pending'],
-    sent:                  ['Sent',         'status-sent'],
-    opened:                ['Opened',       'status-scheduled'],
-    clicked:               ['Clicked',      'status-scheduled'],
-    bounced:               ['Bounced',      'status-pending'],
-    pending_approval:      ['Pending',      'status-pending'],
-    // Appointment statuses
-    scheduled:             ['Scheduled',    'status-scheduled'],
-    completed:             ['Completed',    'status-sent'],
-    cancelled:             ['Cancelled',    'status-pending'],
-    no_show:               ['No Show',      'status-pending'],
   };
-  const [label, cls] = map[status] || [status || '—', 'status-pending'];
+  const [label, cls] = map[status] || ['Unknown', 'status-pending'];
   return `<span class="status-pill ${cls}">${label}</span>`;
 }
 
@@ -344,13 +334,20 @@ function renderAppointmentsTable() {
         <div class="contact-company">${c.company||'—'}</div></div>
       </div></td>
       <td style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">${dt ? dt.toLocaleString('en',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-      <td style="font-size:12px;color:var(--muted)">Diego Ventas</td>
+      <td style="font-size:12px;color:var(--muted)">${getUserName(a.assigned_to_id)}</td>
       <td>${statusHTML(a.status)}</td>
       <td>${a.ai_summary
         ? '<span style="font-size:11px;color:var(--green);font-family:var(--font-mono)">Ready ✓</span>'
         : '<span style="font-size:11px;color:var(--muted)">—</span>'}</td>
     </tr>`;
   }).join('');
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getUserName(userId) {
+  if (!userId) return '—';
+  const user = allUsers.find(u => u.id === userId);
+  return user ? user.name : '—';
 }
 
 // ── CONTACT DETAIL ────────────────────────────────────────────────────────────
@@ -369,10 +366,8 @@ function openDetail(id) {
   document.getElementById('d-name').textContent    = `${c.first_name || ''} ${c.last_name || ''}`;
   document.getElementById('d-title').textContent   = `${c.title || '—'} · ${c.company || '—'}`;
   document.getElementById('d-email').textContent   = c.email;
-  document.getElementById('d-company-input').value  = c.company  || '';
-  document.getElementById('d-region-input').value   = c.region   || '';
-  document.getElementById('d-title-input').value    = c.title    || '';
-  document.getElementById('d-industry-input').value = c.industry || '';
+  document.getElementById('d-company-input').value = c.company || '';
+  document.getElementById('d-region-input').value  = c.region || '';
   document.getElementById('d-source').textContent  = c.source || '—';
   document.getElementById('d-subscribed').innerHTML = subscribedHTML(c.subscribed);
   document.getElementById('d-score').innerHTML     = scoreHTML(c.score);
@@ -394,21 +389,16 @@ function openDetail(id) {
 
 function checkDetailDirty() {
   if (!currentContact) return;
-  const companyChanged  = document.getElementById('d-company-input').value  !== (currentContact.company  || '');
-  const regionChanged   = document.getElementById('d-region-input').value   !== (currentContact.region   || '');
-  const titleChanged    = document.getElementById('d-title-input').value    !== (currentContact.title    || '');
-  const industryChanged = document.getElementById('d-industry-input').value !== (currentContact.industry || '');
-  document.getElementById('d-save-btn').style.display =
-    (companyChanged || regionChanged || titleChanged || industryChanged) ? 'block' : 'none';
+  const companyChanged = document.getElementById('d-company-input').value !== (currentContact.company || '');
+  const regionChanged  = document.getElementById('d-region-input').value  !== (currentContact.region  || '');
+  document.getElementById('d-save-btn').style.display = (companyChanged || regionChanged) ? 'block' : 'none';
 }
 
 async function saveContactDetails() {
   if (!currentContact) return;
-  const company  = document.getElementById('d-company-input').value.trim();
-  const region   = document.getElementById('d-region-input').value.trim();
-  const title    = document.getElementById('d-title-input').value.trim();
-  const industry = document.getElementById('d-industry-input').value.trim();
-  const btn      = document.getElementById('d-save-btn');
+  const company = document.getElementById('d-company-input').value.trim();
+  const region  = document.getElementById('d-region-input').value.trim();
+  const btn     = document.getElementById('d-save-btn');
 
   btn.disabled = true;
   btn.textContent = 'Saving...';
@@ -417,7 +407,7 @@ async function saveContactDetails() {
     const r = await fetch(`${API}/contacts/${currentContact.id}`, {
       method: 'PATCH',
       headers: authHeaders(),
-      body: JSON.stringify({ company, region, title, industry })
+      body: JSON.stringify({ company, region })
     });
     if (r.ok) {
       showNotif('Saved', 'Contact details updated');
@@ -447,8 +437,6 @@ function closeDetailPanel() {
   document.getElementById('d-action-result').textContent   = '';
   document.getElementById('d-generate-btn').textContent    = 'Generate Outreach';
   document.getElementById('d-generate-btn').onclick        = generateOutreach;
-  document.getElementById('d-title-input').value           = '';
-  document.getElementById('d-industry-input').value        = '';
   currentContact = null;
 }
 
@@ -806,8 +794,6 @@ async function checkAuth() {
 // ── DETAIL FIELD LISTENERS ──────────────────────────────────────────────────
 document.getElementById('d-company-input')?.addEventListener('input', checkDetailDirty);
 document.getElementById('d-region-input')?.addEventListener('input', checkDetailDirty);
-document.getElementById('d-title-input')?.addEventListener('input', checkDetailDirty);
-document.getElementById('d-industry-input')?.addEventListener('input', checkDetailDirty);
 
 checkAuth();
 setInterval(() => { if(getToken()) loadData(); }, 30000);

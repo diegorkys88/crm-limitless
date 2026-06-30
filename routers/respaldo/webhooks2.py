@@ -103,20 +103,6 @@ async def _handle_booking(data: dict, background_tasks: BackgroundTasks, db: Ses
     ))
     db.commit()
 
-    # Add crm-scheduled tag in Kajabi if contact has kajabi_id
-    if contact.kajabi_id:
-        try:
-            from services.kajabi import kajabi_service
-            kajabi_service.tag_contact_by_name(contact.kajabi_id, "crm-scheduled")
-            db.add(SyncLog(
-                id=str(uuid.uuid4()), contact_id=contact.id,
-                platform="kajabi", action="add_tag",
-                tag="crm-scheduled", status="success",
-            ))
-            db.commit()
-        except Exception as e:
-            print(f"[Kajabi tag] crm-scheduled error: {e}")
-
     # Generate AI summary synchronously — avoids SQLite threading issues
     try:
         from agents.scheduler import scheduler_agent
