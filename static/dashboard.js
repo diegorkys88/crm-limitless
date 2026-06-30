@@ -2,6 +2,7 @@ const API = window.location.hostname === 'localhost' || window.location.hostname
   ? 'http://127.0.0.1:8000'
   : `${window.location.protocol}//${window.location.host}`;
 let allContacts = [];
+let allUsers    = [];
 let allOutreach = [];
 let allAppointments = [];
 let currentContact = null;
@@ -10,11 +11,13 @@ let currentContact = null;
 async function loadData() {
   try {
     const h = authHeaders();
-    const [contacts, appts, outreach] = await Promise.all([
+    const [contacts, appts, outreach, users] = await Promise.all([
       fetch(`${API}/contacts/?limit=1000`, {headers:h}).then(r => r.json()),
       fetch(`${API}/appointments/`, {headers:h}).then(r => r.json()),
       fetch(`${API}/outreach/`, {headers:h}).then(r => r.json()),
+      fetch(`${API}/auth/users`, {headers:h}).then(r => r.json()).catch(() => []),
     ]);
+    allUsers = Array.isArray(users) ? users : [];
 
     allContacts    = contacts;
     allAppointments = appts;
@@ -344,13 +347,20 @@ function renderAppointmentsTable() {
         <div class="contact-company">${c.company||'—'}</div></div>
       </div></td>
       <td style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">${dt ? dt.toLocaleString('en',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-      <td style="font-size:12px;color:var(--muted)">Diego Ventas</td>
+      <td style="font-size:12px;color:var(--muted)">${getUserName(a.assigned_to_id)}</td>
       <td>${statusHTML(a.status)}</td>
       <td>${a.ai_summary
         ? '<span style="font-size:11px;color:var(--green);font-family:var(--font-mono)">Ready ✓</span>'
         : '<span style="font-size:11px;color:var(--muted)">—</span>'}</td>
     </tr>`;
   }).join('');
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getUserName(userId) {
+  if (!userId) return '—';
+  const user = allUsers.find(u => u.id === userId);
+  return user ? user.name : '—';
 }
 
 // ── CONTACT DETAIL ────────────────────────────────────────────────────────────
