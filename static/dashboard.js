@@ -294,10 +294,19 @@ function searchContacts(val) {
 function applyFilters() {
   let filtered = allContacts;
   if (currentFilter !== 'all') {
-    if (['hot','warm','cold'].includes(currentFilter))
+    if (['hot','warm','cold'].includes(currentFilter)) {
       filtered = filtered.filter(c => c.score === currentFilter);
-    else
+    } else if (currentFilter === 'outreach_sent') {
+      // "Contacted" = outreach sent OR appointment scheduled (all contacted)
+      filtered = filtered.filter(c =>
+        c.status === 'outreach_sent' ||
+        c.status === 'appointment_scheduled' ||
+        c.status === 'closed_won' ||
+        c.status === 'closed_lost'
+      );
+    } else {
       filtered = filtered.filter(c => c.status === currentFilter);
+    }
   }
   if (currentSearch)
     filtered = filtered.filter(c =>
