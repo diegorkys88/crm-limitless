@@ -297,13 +297,16 @@ function applyFilters() {
     if (['hot','warm','cold'].includes(currentFilter)) {
       filtered = filtered.filter(c => c.score === currentFilter);
     } else if (currentFilter === 'outreach_sent') {
-      // "Contacted" = outreach sent OR appointment scheduled (all contacted)
       filtered = filtered.filter(c =>
         c.status === 'outreach_sent' ||
         c.status === 'appointment_scheduled' ||
         c.status === 'closed_won' ||
         c.status === 'closed_lost'
       );
+    } else if (currentFilter === 'subscribed') {
+      filtered = filtered.filter(c => c.subscribed === 'true');
+    } else if (currentFilter === 'not_subscribed') {
+      filtered = filtered.filter(c => c.subscribed === 'false');
     } else {
       filtered = filtered.filter(c => c.status === currentFilter);
     }
