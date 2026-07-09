@@ -155,16 +155,18 @@ def import_from_kajabi(
 
 @router.post("/kajabi/import/sync")
 def import_from_kajabi_sync(
-    limit: int = Query(100, ge=1, le=100),
-    page:  int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100, description="Max contacts for this test run"),
     db: Session = Depends(get_db)
 ):
+    """
+    Same as above but waits for the result — use for testing with small limits.
+    """
     from services.kajabi import kajabi_service
     from database import Contact, SyncLog
     import uuid
 
     try:
-        kajabi_contacts, meta = kajabi_service.list_contacts(page=page, page_size=limit)
+        kajabi_contacts, meta = kajabi_service.list_contacts(page=1, page_size=limit)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Kajabi error: {str(e)}")
 
@@ -179,21 +181,21 @@ def import_from_kajabi_sync(
 
         existing = db.query(Contact).filter(Contact.email == email).first()
         if existing:
+            # Update kajabi_id if missing
             if not existing.kajabi_id:
                 existing.kajabi_id = kc.get("kajabi_id")
             skipped += 1
             continue
 
         contact = Contact(
-            id         = str(uuid.uuid4()),
-            first_name = kc.get("first_name"),
-            last_name  = kc.get("last_name"),
-            email      = email,
-            phone      = kc.get("phone"),
-            source     = "kajabi",
-            kajabi_id  = kc.get("kajabi_id"),
-            subscribed = kc.get("subscribed", "unknown"),
-            status     = "pending",
+            id          = str(uuid.uuid4()),
+            first_name  = kc.get("first_name"),
+            last_name   = kc.get("last_name"),
+            email       = email,
+            phone       = kc.get("phone"),
+            source      = "kajabi",
+            kajabi_id   = kc.get("kajabi_id"),
+            status      = "pending",
         )
         db.add(contact)
         db.add(SyncLog(
@@ -293,8 +295,7 @@ def _run_kajabi_import(limit):
             contact = Contact(
                 id=str(uuid.uuid4()), first_name=kc.get("first_name"),
                 last_name=kc.get("last_name"), email=email, phone=kc.get("phone"),
-                source="kajabi", kajabi_id=kc.get("kajabi_id"),
-                subscribed=kc.get("subscribed", "unknown"), status="pending",
+                source="kajabi", kajabi_id=kc.get("kajabi_id"), status="pending",
             )
             db.add(contact)
             db.add(SyncLog(
@@ -330,3 +331,77 @@ def test_kajabi_connection():
         }
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Kajabi connection failed: {str(e)}")
+
+
+# ── Calendly ───────────────────────────────────────────────────────────────────
+
+@router.post("/calendly/webhook/register")
+def register_calendly_webhook(
+    webhook_url: str = Query(
+        None,
+        description="Leave empty to use CRM_URL from environment"
+    )
+):
+    """
+    Register the CRM webhook URL in Calendly.
+    Call this once to connect Calendly to the CRM.
+    After this, every booking will automatically create an appointment in the CRM.
+    """
+    from services.calendly import calendly_service
+    import os
+
+    crm_url = os.getenv("CRM_URL", "https://web-production-5bd62.up.railway.app")
+
+    target_url = webhook_url or f"{crm_url}/webhooks/calendly"
+
+    try:
+        user = calendly_service.get_user()
+        if not user:
+            raise HTTPException(status_code=502, detail="Could not get Calendly user info")
+
+        org = user.get("current_organization")
+        result = calendly_service.register_webhook(target_url, org)
+
+        return {
+            "status":      "registered",
+            "webhook_url": target_url,
+            "calendly_id": result.get("resource", {}).get("uri", ""),
+            "events":      ["invitee.created", "invitee.canceled"],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Calendly error: {str(e)}")
+
+
+@router.get("/calendly/webhook/list")
+def list_calendly_webhooks():
+    """List all webhooks registered in Calendly"""
+    from services.calendly import calendly_service
+    try:
+        webhooks = calendly_service.list_webhooks()
+        return {
+            "count": len(webhooks),
+            "webhooks": [
+                {
+                    "uri":    w.get("uri"),
+                    "url":    w.get("callback_url"),
+                    "events": w.get("events"),
+                    "state":  w.get("state"),
+                }
+                for w in webhooks
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Calendly error: {str(e)}")
+
+
+@router.delete("/calendly/webhook/{webhook_uuid}")
+def delete_calendly_webhook(webhook_uuid: str):
+    """Delete a Calendly webhook by UUID"""
+    from services.calendly import calendly_service
+    try:
+        success = calendly_service.delete_webhook(webhook_uuid)
+        if success:
+            return {"status": "deleted", "uuid": webhook_uuid}
+        raise HTTPException(status_code=502, detail="Could not delete webhook")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Calendly error: {str(e)}")
