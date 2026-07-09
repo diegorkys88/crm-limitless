@@ -81,3 +81,28 @@ class CalendlyService:
 
 
 calendly_service = CalendlyService()
+
+
+    def list_webhooks(self) -> list[dict]:
+        """List all registered webhooks"""
+        user = self.get_user()
+        if not user:
+            return []
+        org = user.get("current_organization")
+        with httpx.Client(timeout=15) as client:
+            resp = client.get(
+                f"{CALENDLY_API_BASE}/webhook_subscriptions",
+                params={"organization": org, "scope": "organization"},
+                headers=HEADERS,
+            )
+        resp.raise_for_status()
+        return resp.json().get("collection", [])
+
+    def delete_webhook(self, webhook_uuid: str) -> bool:
+        """Delete a webhook by UUID"""
+        with httpx.Client(timeout=15) as client:
+            resp = client.delete(
+                f"{CALENDLY_API_BASE}/webhook_subscriptions/{webhook_uuid}",
+                headers=HEADERS,
+            )
+        return resp.status_code in (200, 204)
