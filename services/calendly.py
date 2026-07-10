@@ -80,9 +80,6 @@ class CalendlyService:
         return resp.json().get("resource")
 
 
-calendly_service = CalendlyService()
-
-
     def list_webhooks(self) -> list[dict]:
         """List all registered webhooks"""
         user = self.get_user()
@@ -106,3 +103,6 @@ calendly_service = CalendlyService()
                 headers=HEADERS,
             )
         return resp.status_code in (200, 204)
+
+
+calendly_service = CalendlyService()
