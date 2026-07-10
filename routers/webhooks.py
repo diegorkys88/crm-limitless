@@ -33,39 +33,48 @@ async def calendly_webhook(
     return {"status": "ok", "event": event}
 
 
-async def _handle_booking(data: dict, background_tasks: BackgroundTasks, db: Session):
+async def _handle_booking(data: dict, background_tasks, db: Session):
     """Someone booked a meeting"""
 
-    # Extract contact_id from UTM params
+    # Real Calendly payload structure:
+    # data = { "invitee": {...}, "event": {...}, "tracking": {...} }
+    invitee  = data.get("invitee", {})
+    tracking = data.get("tracking", {})
+
+    # Extract contact_id from UTM content (added when we generate the Calendly link)
     contact_id = (
-        data.get("tracking", {}).get("utm_content") or
+        tracking.get("utm_content") or
         data.get("utm_params", {}).get("utm_content")
     )
 
-    # Find contact by ID or fall back to email
+    # Get email — real payload has it in invitee.email
+    email = invitee.get("email") or data.get("email")
+
+    # Find contact by ID first, then by email
     contact = None
     if contact_id:
         contact = db.query(Contact).filter(Contact.id == contact_id).first()
 
-    if not contact:
-        email = data.get("email")
-        if email:
-            contact = db.query(Contact).filter(Contact.email == email).first()
+    if not contact and email:
+        contact = db.query(Contact).filter(Contact.email == email).first()
 
-    if not contact:
-        # Create a new contact from the Calendly booking
+    if not contact and email:
+        # Create new contact from Calendly booking
         contact = Contact(
             id         = str(uuid.uuid4()),
-            first_name = data.get("first_name"),
-            last_name  = data.get("last_name"),
-            email      = data.get("email"),
+            first_name = invitee.get("first_name") or data.get("first_name"),
+            last_name  = invitee.get("last_name")  or data.get("last_name"),
+            email      = email,
             source     = "calendly",
             status     = "appointment_scheduled",
         )
         db.add(contact)
         db.flush()
 
-    # Parse scheduled time
+    if not contact:
+        return {"status": "ignored", "reason": "no email in payload"}
+
+    # Parse scheduled time — real payload: data.event.start_time
     scheduled_at = None
     event_data   = data.get("event", {}) or data.get("scheduled_event", {})
     start_time   = event_data.get("start_time")
