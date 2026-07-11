@@ -66,24 +66,36 @@ async def _handle_booking(data: dict, background_tasks: BackgroundTasks, db: Ses
         db.flush()
 
     # Parse scheduled time
+    # In real Calendly payload, data["event"] is a URI string not a dict
+    # The invitee object has the scheduled event details
     scheduled_at = None
-    event_data   = data.get("event", {}) or data.get("scheduled_event", {})
-    start_time   = event_data.get("start_time")
+    invitee      = data.get("invitee", {})
+    event_uri    = data.get("event", "")
+
+    # Try to get start_time from scheduled_event or invitee
+    event_data = data.get("scheduled_event", {})
+    if isinstance(event_data, dict):
+        start_time = event_data.get("start_time")
+    else:
+        start_time = invitee.get("start_time") or data.get("start_time")
+
     if start_time:
         try:
-            scheduled_at = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+            scheduled_at = datetime.fromisoformat(str(start_time).replace("Z", "+00:00"))
         except Exception:
             scheduled_at = None
 
     # Assign to first available sales rep
-    assigned_user = db.query(User).first()
+    assigned_user = db.query(User).filter(User.role == "sales_rep", User.is_active == "true").first()
+    if not assigned_user:
+        assigned_user = db.query(User).first()
 
     # Create appointment
     appt = Appointment(
         id                = str(uuid.uuid4()),
         contact_id        = contact.id,
         assigned_to_id    = assigned_user.id if assigned_user else None,
-        calendly_event_id = data.get("uri") or data.get("event", {}).get("uri", ""),
+        calendly_event_id = event_uri if isinstance(event_uri, str) else str(event_uri),
         scheduled_at      = scheduled_at,
         status            = "scheduled",
     )
