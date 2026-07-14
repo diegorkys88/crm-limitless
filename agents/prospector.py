@@ -153,6 +153,7 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
             email = None
             try:
                 enriched = apollo_service.enrich_person(
+                    apollo_id    = contact_data.get("apollo_id"),
                     first_name   = contact_data.get("first_name"),
                     last_name    = contact_data.get("last_name"),
                     domain       = contact_data.get("domain"),

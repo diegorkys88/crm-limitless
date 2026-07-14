@@ -72,19 +72,22 @@ class ApolloService:
         last_name:    str = None,
         domain:       str = None,
         linkedin_url: str = None,
+        apollo_id:    str = None,
     ) -> dict | None:
         """
-        Enrich one person to get their full profile.
-        FREE on all plans — uses credits only for email reveal.
-        Best results: provide email OR (first_name + last_name + domain).
+        Enrich one person to get their full profile + verified email.
+        Consumes 1 email credit when an email is revealed.
+        Best match: apollo_id (exact) > email > linkedin_url > name+domain.
         """
         params = [
-            ("reveal_personal_emails", "false"),
+            ("reveal_personal_emails", "true"),
             ("reveal_phone_number",    "false"),
         ]
+        if apollo_id:    params.append(("id",           apollo_id))
         if email:        params.append(("email",        email))
         if first_name:   params.append(("first_name",   first_name))
-        if last_name:    params.append(("last_name",    last_name))
+        if last_name and last_name.lower() != "none":
+            params.append(("last_name", last_name))
         if domain:       params.append(("domain",       domain))
         if linkedin_url: params.append(("linkedin_url", linkedin_url))
 
@@ -128,7 +131,7 @@ class ApolloService:
         with httpx.Client(timeout=30) as client:
             resp = client.post(
                 f"{APOLLO_BASE}/people/bulk_match",
-                params  = [("reveal_personal_emails", "false"), ("reveal_phone_number", "false")],
+                params  = [("reveal_personal_emails", "true"), ("reveal_phone_number", "false")],
                 json    = {"details": details},
                 headers = HEADERS,
             )
