@@ -135,15 +135,18 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
         # ── Step 3: Enrich to get emails (costs 1 credit per person) ──────────
         imported = 0
         skipped  = 0
+        skip_reasons = []
 
         for contact_data in approved:
             apollo_id = contact_data.get("apollo_id")
+            person_name = f"{contact_data.get('first_name','')} {contact_data.get('last_name','')}".strip()
 
             # Skip if already in DB by apollo_id
             if apollo_id:
                 existing = db.query(Contact).filter(Contact.apollo_id == apollo_id).first()
                 if existing:
                     skipped += 1
+                    skip_reasons.append(f"{person_name}: already in DB (apollo_id)")
                     continue
 
             # Enrich to get email
@@ -166,12 +169,14 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
             # Skip if no email found
             if not email:
                 skipped += 1
+                skip_reasons.append(f"{person_name}: Apollo has no verified email")
                 continue
 
             # Skip duplicate emails
             existing_email = db.query(Contact).filter(Contact.email == email).first()
             if existing_email:
                 skipped += 1
+                skip_reasons.append(f"{person_name}: email already in DB ({email})")
                 continue
 
             # Save to DB
@@ -202,9 +207,10 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
 
         db.commit()
 
-        stats["imported"] = imported
-        stats["skipped"]  = skipped
-        stats["summary"]  = (
+        stats["imported"]     = imported
+        stats["skipped"]      = skipped
+        stats["skip_reasons"] = skip_reasons
+        stats["summary"]      = (
             f"Found {stats['found']}, approved {stats['approved']}, "
             f"enriched {stats['enriched']}, imported {imported}, skipped {skipped}"
         )
