@@ -173,6 +173,13 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
                 skip_reasons.append(f"{person_name}: Apollo has no verified email")
                 continue
 
+            # Skip garbage data from Apollo (undefined names create fake emails)
+            last = (contact_data.get("last_name") or "").lower()
+            if last in ("undefined", "none", "null", "unknown") or "undefined" in email.lower():
+                skipped += 1
+                skip_reasons.append(f"{person_name}: invalid Apollo data (undefined name/email)")
+                continue
+
             # Skip duplicate emails
             existing_email = db.query(Contact).filter(Contact.email == email).first()
             if existing_email:
@@ -207,6 +214,23 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
             imported += 1
 
         db.commit()
+
+        # Auto-classify newly imported contacts (they have title+industry from Apollo)
+        if imported > 0:
+            try:
+                from agents.classifier import classifier_agent
+                new_contacts = (
+                    db.query(Contact)
+                    .filter(Contact.source == "apollo", Contact.score == None)
+                    .all()
+                )
+                for c in new_contacts:
+                    try:
+                        classifier_agent.classify(c, db)
+                    except Exception as e:
+                        print(f"[Prospector] Classify error for {c.email}: {e}")
+            except Exception as e:
+                print(f"[Prospector] Classifier import error: {e}")
 
         stats["imported"]     = imported
         stats["skipped"]      = skipped
