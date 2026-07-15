@@ -335,7 +335,7 @@ function renderOutreachTable() {
   }
   tbody.innerHTML = allOutreach.map(o => {
     const c = allContacts.find(x => x.id === o.contact_id) || {};
-    return `<tr class="fade-in">
+    return `<tr class="fade-in" onclick="openEmailModal('${o.id}')" style="cursor:pointer">
       <td><div class="contact-cell">
         <div class="contact-avatar" style="background:${avatarColor(c.id || '0')}">${initials(c)}</div>
         <div><div class="contact-name">${c.first_name || ''} ${c.last_name || ''}</div>
@@ -345,10 +345,83 @@ function renderOutreachTable() {
       <td>${statusHTML(o.status)}</td>
       <td style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">${o.sent_at ? new Date(o.sent_at).toLocaleDateString() : '—'}</td>
       <td>${o.status === 'draft'
-        ? `<button class="action-btn" onclick="sendOutreach('${o.id}')">Send</button>`
+        ? `<button class="action-btn" onclick="event.stopPropagation();openEmailModal('${o.id}')">Review & Send</button>`
         : '<span style="font-size:11px;color:var(--muted)">Sent</span>'}</td>
     </tr>`;
   }).join('');
+}
+
+// ── EMAIL REVIEW MODAL ────────────────────────────────────────────────────────
+let currentOutreachId = null;
+
+function openEmailModal(outreachId) {
+  const o = allOutreach.find(x => x.id === outreachId);
+  if (!o) return;
+  currentOutreachId = outreachId;
+
+  const c = allContacts.find(x => x.id === o.contact_id) || {};
+  const isDraft = o.status === 'draft';
+
+  document.getElementById('em-to').textContent        = `${c.first_name || ''} ${c.last_name || ''} <${c.email || '—'}>`;
+  document.getElementById('em-subject').value         = o.subject || '';
+  document.getElementById('em-subject').readOnly      = !isDraft;
+  document.getElementById('em-body').value            = o.body || '';
+  document.getElementById('em-body').readOnly         = !isDraft;
+  document.getElementById('em-send-btn').style.display = isDraft ? 'inline-flex' : 'none';
+  document.getElementById('em-status-label').innerHTML = statusHTML(o.status);
+  document.getElementById('em-result').textContent    = '';
+
+  document.getElementById('email-modal').classList.add('open');
+}
+
+function closeEmailModal() {
+  document.getElementById('email-modal').classList.remove('open');
+  currentOutreachId = null;
+}
+
+async function sendFromModal() {
+  if (!currentOutreachId) return;
+  const btn     = document.getElementById('em-send-btn');
+  const res     = document.getElementById('em-result');
+  const subject = document.getElementById('em-subject').value.trim();
+  const body    = document.getElementById('em-body').value;
+
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Saving changes and sending...';
+
+  try {
+    // Save any edits first
+    await fetch(`${API}/outreach/${currentOutreachId}`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({subject, body})
+    });
+
+    const r = await fetch(`${API}/outreach/${currentOutreachId}/send?sender_name=Diego`, {
+      method: 'POST', headers: authHeaders()
+    });
+    const d = await r.json();
+
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ Email sent to ${d.to}`;
+      showNotif('Email Sent!', `Delivered to ${d.to}`);
+      await loadData();
+      renderOutreachTable();
+      setTimeout(closeEmailModal, 1500);
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Error sending email';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send Email';
+  }
 }
 
 // ── APPOINTMENTS TABLE ─────────────────────────────────────────────────────────

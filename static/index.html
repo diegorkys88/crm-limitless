@@ -529,6 +529,36 @@
   </div>
 </div>
 
+<!-- EMAIL REVIEW MODAL -->
+<div class="modal-overlay" id="email-modal">
+  <div class="modal" style="width:640px">
+    <div class="modal-header">
+      <div class="modal-title">REVIEW EMAIL</div>
+      <span id="em-status-label"></span>
+      <button class="modal-close" onclick="closeEmailModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field full" style="margin-bottom:14px">
+        <label>To</label>
+        <div id="em-to" style="font-size:13px;color:var(--white);padding:6px 0">—</div>
+      </div>
+      <div class="field full" style="margin-bottom:14px">
+        <label>Subject</label>
+        <input type="text" id="em-subject" style="width:100%">
+      </div>
+      <div class="field full">
+        <label>Body — editable before sending</label>
+        <textarea id="em-body" style="width:100%;min-height:280px;background:var(--gray2);border:1px solid var(--border);color:var(--white);padding:12px;font-size:13px;font-family:var(--font-body);border-radius:4px;outline:none;resize:vertical;line-height:1.6"></textarea>
+      </div>
+      <div id="em-result" style="margin-top:10px;font-size:12px;font-family:var(--font-mono)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeEmailModal()">Close</button>
+      <button class="btn btn-primary" id="em-send-btn" onclick="sendFromModal()">Send Email</button>
+    </div>
+  </div>
+</div>
+
 <!-- NOTIFICATION -->
 <div class="notif" id="notif" style="display:none">
   <div class="notif-dot"></div>
