@@ -197,6 +197,7 @@ function renderPipelineBars() {
 // ── CONTACTS TABLE ────────────────────────────────────────────────────────────
 let currentFilter = 'all';
 let currentSearch = '';
+let currentSource = 'all';
 let currentContactPage = 1;
 const CONTACTS_PER_PAGE = 50;
 
@@ -291,6 +292,12 @@ function searchContacts(val) {
   applyFilters();
 }
 
+function filterBySource(val) {
+  currentSource = val;
+  currentContactPage = 1;
+  applyFilters();
+}
+
 function applyFilters() {
   let filtered = allContacts;
   if (currentFilter !== 'all') {
@@ -311,6 +318,8 @@ function applyFilters() {
       filtered = filtered.filter(c => c.status === currentFilter);
     }
   }
+  if (currentSource !== 'all')
+    filtered = filtered.filter(c => c.source === currentSource);
   if (currentSearch)
     filtered = filtered.filter(c =>
       `${c.first_name} ${c.last_name} ${c.email} ${c.company}`.toLowerCase().includes(currentSearch));
@@ -628,12 +637,42 @@ async function runApolloSearch() {
   const region   = document.getElementById('apollo-region').value;
   const industry = document.getElementById('apollo-industry').value;
   const limit    = document.getElementById('apollo-limit').value;
-  const res = document.getElementById('apollo-result');
-  res.textContent = 'Searching...';
-  const r = await fetch(`${API}/sync/apollo/search/sync?region=${encodeURIComponent(region)}&industry=${industry}&limit=${limit}&enrich=false`, {method:'POST', headers:authHeaders()});
-  const d = await r.json();
-  res.textContent = d.error ? `Error: ${d.error}` : `Found: ${d.found} | Approved: ${d.approved} | ${d.summary}`;
-  await loadData();
+  const enrich   = document.getElementById('apollo-enrich').checked;
+  const btn      = document.getElementById('apollo-search-btn');
+  const res      = document.getElementById('apollo-result');
+
+  btn.disabled = true;
+  btn.textContent = enrich ? 'Searching & importing...' : 'Searching (preview)...';
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Searching Apollo...';
+
+  try {
+    const r = await fetch(`${API}/sync/apollo/search/sync?region=${encodeURIComponent(region)}&industry=${encodeURIComponent(industry)}&limit=${limit}&enrich=${enrich}`, {method:'POST', headers:authHeaders()});
+    const d = await r.json();
+
+    if (d.error) {
+      res.style.color = 'var(--hot)';
+      res.textContent = `Error: ${d.error}`;
+    } else if (enrich) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ Found: ${d.found} | Approved: ${d.approved} | Imported: ${d.imported} | Skipped: ${d.skipped}`;
+      if (d.skip_reasons && d.skip_reasons.length) {
+        res.textContent += `\n${d.skip_reasons.join('\n')}`;
+      }
+      if (d.imported > 0) showNotif('Apollo Import', `${d.imported} new contacts imported and classified`);
+      await loadData();
+      applyFilters();
+    } else {
+      res.style.color = 'var(--green)';
+      res.textContent = `Preview: found ${d.found} contacts. Check "Enrich & import" to save them.`;
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Search Apollo';
+  }
 }
 
 async function runKajabiImport() {
@@ -936,6 +975,31 @@ async function changePassword() {
   } else {
     res.style.color = 'var(--hot)';
     res.textContent = d.detail || 'Error updating password';
+  }
+}
+
+// ── DELETE CONTACT ───────────────────────────────────────────────────────────
+async function deleteContact() {
+  if (!currentContact) return;
+  const name = `${currentContact.first_name || ''} ${currentContact.last_name || ''}`.trim() || currentContact.email;
+  if (!confirm(`Delete ${name} permanently?\n\nThis removes the contact and all their outreach/appointments from the CRM. This cannot be undone.`)) return;
+
+  try {
+    const r = await fetch(`${API}/contacts/${currentContact.id}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    if (r.ok || r.status === 204) {
+      showNotif('Contact deleted', `${name} removed from CRM`);
+      closeDetailPanel();
+      await loadData();
+      applyFilters();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      showNotif('Error', d.detail || 'Could not delete contact');
+    }
+  } catch (e) {
+    showNotif('Error', 'Connection error while deleting');
   }
 }
 

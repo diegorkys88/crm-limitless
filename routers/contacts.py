@@ -86,10 +86,28 @@ def update_contact(contact_id: str, data: ContactUpdate, db: Session = Depends(g
 
 
 @router.delete("/{contact_id}", status_code=204)
-def delete_contact(contact_id: str, db: Session = Depends(get_db)):
-    """Delete a contact"""
+def delete_contact(
+    contact_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete a contact and all their related records.
+    Removes outreach, appointments, and sync logs first (foreign keys).
+    """
     contact = db.query(Contact).filter(Contact.id == contact_id).first()
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
+
+    from database import Outreach, Appointment, SyncLog, AgentLog
+
+    db.query(Outreach).filter(Outreach.contact_id == contact_id).delete()
+    db.query(Appointment).filter(Appointment.contact_id == contact_id).delete()
+    db.query(SyncLog).filter(SyncLog.contact_id == contact_id).delete()
+    try:
+        db.query(AgentLog).filter(AgentLog.contact_id == contact_id).delete()
+    except Exception:
+        pass  # AgentLog may not have contact_id in all versions
+
     db.delete(contact)
     db.commit()

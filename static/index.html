@@ -233,7 +233,15 @@
           <button class="filter-chip" onclick="filterContacts('outreach_sent', this)">Contacted</button>
           <button class="filter-chip" onclick="filterContacts('subscribed', this)">✓ Subscribed</button>
           <button class="filter-chip" onclick="filterContacts('not_subscribed', this)">✗ Not Subscribed</button>
-          <input class="search-input" type="text" placeholder="Search contacts..." oninput="searchContacts(this.value)">
+          <select id="source-filter" onchange="filterBySource(this.value)" style="margin-left:auto;background:var(--gray2);border:1px solid var(--border);color:var(--muted);padding:6px 10px;font-size:12px;font-family:var(--font-body);border-radius:4px;outline:none;cursor:pointer">
+            <option value="all">All sources</option>
+            <option value="kajabi">Kajabi</option>
+            <option value="apollo">Apollo</option>
+            <option value="calendly">Calendly</option>
+            <option value="clickfunnels">ClickFunnels</option>
+            <option value="manual">Manual</option>
+          </select>
+          <input class="search-input" type="text" placeholder="Search contacts..." oninput="searchContacts(this.value)" style="margin-left:8px">
         </div>
         <table>
           <thead>
@@ -367,7 +375,7 @@
         <div class="panel">
           <div class="panel-header"><div class="panel-title">APOLLO PROSPECTING</div></div>
           <div style="padding:20px">
-            <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">Search Apollo for new automotive executives. Set enrich=false to preview without spending credits.</p>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">Search Apollo for new automotive executives. Enable "Enrich" to reveal emails and import (uses 1 credit per contact).</p>
             <div class="field" style="margin-bottom:12px">
               <label>Region</label>
               <input type="text" id="apollo-region" placeholder="e.g. California" value="California">
@@ -380,7 +388,11 @@
               <label>Limit</label>
               <input type="number" id="apollo-limit" value="10" min="1" max="25">
             </div>
-            <button class="btn btn-primary" onclick="runApolloSearch()" style="width:100%">Search Apollo</button>
+            <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:12px;color:var(--muted);cursor:pointer">
+              <input type="checkbox" id="apollo-enrich" style="accent-color:var(--white);cursor:pointer">
+              Enrich &amp; import (uses credits) — unchecked = preview only
+            </label>
+            <button class="btn btn-primary" id="apollo-search-btn" onclick="runApolloSearch()" style="width:100%">Search Apollo</button>
             <div id="apollo-result" style="margin-top:12px;font-size:12px;color:var(--green);font-family:var(--font-mono)"></div>
           </div>
         </div>
@@ -508,6 +520,7 @@
       <div class="detail-actions" style="margin-top:8px">
         <button class="btn btn-ghost" onclick="closeContact('won')" style="color:var(--green);border-color:rgba(46,204,113,0.5)">✓ Close Won</button>
         <button class="btn btn-ghost" onclick="closeContact('lost')" style="color:var(--hot);border-color:rgba(255,77,46,0.5)">✗ Close Lost</button>
+        <button class="btn btn-ghost" onclick="deleteContact()" style="color:var(--hot);border-color:transparent;margin-left:auto" title="Delete contact permanently">🗑</button>
       </div>
 
       <div id="d-action-result" style="margin-top:12px;font-size:12px;color:var(--green);font-family:var(--font-mono);line-height:1.5"></div>
