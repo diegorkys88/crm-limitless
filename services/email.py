@@ -1,13 +1,20 @@
 import os
 import re
-import httpx
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr
 from dotenv import load_dotenv
 
 load_dotenv()
 
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-EMAIL_FROM       = os.getenv("EMAIL_FROM",      "crm@yourcompany.com")
-EMAIL_FROM_NAME  = os.getenv("EMAIL_FROM_NAME", "Limitless Leadership")
+# Gmail SMTP (Google Workspace) — replaces SendGrid
+SMTP_HOST       = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT       = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER       = os.getenv("SMTP_USER")       # connect@limitlessleadership.co
+SMTP_PASSWORD   = os.getenv("SMTP_PASSWORD")   # Google App Password (16 chars)
+EMAIL_FROM      = os.getenv("EMAIL_FROM",      SMTP_USER or "crm@yourcompany.com")
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Limitless Leadership")
 
 
 def build_email_html(body: str, sender_name: str = "The Leadership Coaching Team") -> str:
@@ -124,7 +131,10 @@ class EmailService:
         reply_to:    str = None,
         sender_name: str = None,
     ) -> dict:
-        """Send an email via SendGrid using the Limitless Leadership HTML template."""
+        """Send an email via Gmail SMTP (Google Workspace) using the Limitless Leadership HTML template."""
+
+        if not SMTP_USER or not SMTP_PASSWORD:
+            return {"success": False, "error": "SMTP_USER / SMTP_PASSWORD not configured", "status_code": 500}
 
         sender = sender_name or EMAIL_FROM_NAME
 
@@ -134,49 +144,71 @@ class EmailService:
         html_body  = build_email_html(body, sender)
         plain_body = body
 
-        payload = {
-            "personalizations": [{"to": [{"email": to_email, "name": to_name}]}],
-            "from":             {"email": EMAIL_FROM, "name": sender},
-            "subject":          subject,
-            "content": [
-                {"type": "text/plain", "value": plain_body},
-                {"type": "text/html",  "value": html_body},
-            ],
-        }
-
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = formataddr((sender, EMAIL_FROM))
+        msg["To"]      = formataddr((to_name or "", to_email))
         if reply_to:
-            payload["reply_to"] = {"email": reply_to}
+            msg["Reply-To"] = reply_to
+
+        msg.attach(MIMEText(plain_body, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body,  "html",  "utf-8"))
 
         try:
-            with httpx.Client(timeout=15) as client:
-                resp = client.post(
-                    "https://api.sendgrid.com/v3/mail/send",
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {SENDGRID_API_KEY}",
-                        "Content-Type":  "application/json",
-                    }
-                )
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+                server.starttls()
+                server.login(SMTP_USER, SMTP_PASSWORD)
+                server.sendmail(EMAIL_FROM, [to_email], msg.as_string())
 
-            if resp.status_code in (200, 202):
-                return {
-                    "success":    True,
-                    "status_code": resp.status_code,
-                    "message_id": resp.headers.get("X-Message-Id"),
-                }
-            else:
-                return {"success": False, "error": resp.text, "status_code": resp.status_code}
+            return {
+                "success":     True,
+                "status_code": 250,
+                "message_id":  msg.get("Message-ID"),
+            }
 
+        except smtplib.SMTPAuthenticationError as e:
+            return {"success": False, "error": f"SMTP auth failed — check App Password: {e}", "status_code": 535}
+        except smtplib.SMTPRecipientsRefused as e:
+            return {"success": False, "error": f"Recipient refused: {e}", "status_code": 550}
         except Exception as e:
             return {"success": False, "error": str(e), "status_code": 500}
 
     def send_batch(self, emails: list[dict]) -> list[dict]:
-        """Send multiple emails one by one."""
+        """Send multiple emails reusing one SMTP connection."""
+        if not SMTP_USER or not SMTP_PASSWORD:
+            return [{"success": False, "error": "SMTP not configured"} for _ in emails]
+
         results = []
-        for email in emails:
-            result = self.send(**email)
-            result["to_email"] = email.get("to_email")
-            results.append(result)
+        try:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+                server.starttls()
+                server.login(SMTP_USER, SMTP_PASSWORD)
+
+                for email in emails:
+                    try:
+                        sender = email.get("sender_name") or EMAIL_FROM_NAME
+                        body   = (email.get("body") or "").replace("[Your Name]", sender).replace("[YOUR NAME]", sender)
+
+                        msg = MIMEMultipart("alternative")
+                        msg["Subject"] = email.get("subject", "")
+                        msg["From"]    = formataddr((sender, EMAIL_FROM))
+                        msg["To"]      = formataddr((email.get("to_name") or "", email["to_email"]))
+                        if email.get("reply_to"):
+                            msg["Reply-To"] = email["reply_to"]
+
+                        msg.attach(MIMEText(body, "plain", "utf-8"))
+                        msg.attach(MIMEText(build_email_html(body, sender), "html", "utf-8"))
+
+                        server.sendmail(EMAIL_FROM, [email["to_email"]], msg.as_string())
+                        results.append({"success": True, "to_email": email["to_email"]})
+                    except Exception as e:
+                        results.append({"success": False, "to_email": email.get("to_email"), "error": str(e)})
+        except Exception as e:
+            # Connection-level failure — mark remaining as failed
+            done = len(results)
+            for email in emails[done:]:
+                results.append({"success": False, "to_email": email.get("to_email"), "error": f"SMTP connection error: {e}"})
+
         return results
 
 
