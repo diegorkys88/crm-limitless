@@ -62,7 +62,10 @@ def enrich_contact(contact_id: str, db: Session = Depends(get_db)):
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
 
-    domain = contact.email.split("@")[1] if contact.email and "@" in contact.email else None
+    FREE_PROVIDERS = {"gmail.com","yahoo.com","hotmail.com","outlook.com","aol.com","icloud.com","live.com","msn.com","protonmail.com","me.com"}
+    domain = contact.email.split("@")[1].lower() if contact.email and "@" in contact.email else None
+    if domain in FREE_PROVIDERS:
+        domain = None  # personal email — don't tell Apollo it's their company
 
     enriched = apollo_service.enrich_person(
         email      = contact.email,
@@ -87,6 +90,15 @@ def enrich_contact(contact_id: str, db: Session = Depends(get_db)):
     ))
     db.commit()
 
+    # If only apollo_id came back, Apollo matched but has no professional data
+    if updated_fields in ([], ["apollo_id"]):
+        return {
+            "status":         "matched_no_data",
+            "updated_fields": updated_fields,
+            "message":        "Apollo found this person but has no title/company data. Try filling Title manually.",
+            "apollo_data":    enriched,
+        }
+
     return {"status": "enriched", "updated_fields": updated_fields, "apollo_data": enriched}
 
 
@@ -107,9 +119,12 @@ def enrich_bulk(limit: int = Query(10, ge=1, le=10), db: Session = Depends(get_d
     if not contacts:
         return {"status": "nothing_to_enrich", "message": "All contacts already have title data"}
 
+    FREE_PROVIDERS_BULK = {"gmail.com","yahoo.com","hotmail.com","outlook.com","aol.com","icloud.com","live.com","msn.com","protonmail.com","me.com"}
     batch = []
     for c in contacts:
-        domain = c.email.split("@")[1] if c.email and "@" in c.email else None
+        domain = c.email.split("@")[1].lower() if c.email and "@" in c.email else None
+        if domain in FREE_PROVIDERS_BULK:
+            domain = None
         batch.append({
             "first_name": c.first_name, "last_name": c.last_name,
             "email": c.email, "domain": domain,
