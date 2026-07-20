@@ -420,3 +420,70 @@ def delete_calendly_webhook(webhook_uuid: str):
         raise HTTPException(status_code=502, detail="Could not delete webhook")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Calendly error: {str(e)}")
+
+
+@router.post("/kajabi/push/{contact_id}")
+def push_contact_to_kajabi(
+    contact_id: str,
+    tag_name:   str = Query("crm-closed", description="Tag to apply after push"),
+    db: Session = Depends(get_db)
+):
+    """
+    Push a CRM contact to Kajabi.
+    - If the contact has no kajabi_id: creates it in Kajabi (or links the existing one by email)
+    - Then applies the given tag (default: crm-closed)
+    Used when closing Won a contact that came from Apollo/Calendly/manual.
+    """
+    from services.kajabi import kajabi_service
+    from database import Contact, SyncLog
+    import uuid
+
+    contact = db.query(Contact).filter(Contact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    created = False
+
+    # Step 1 — ensure the contact exists in Kajabi
+    if not contact.kajabi_id:
+        full_name = f"{contact.first_name or ''} {contact.last_name or ''}".strip() or None
+        try:
+            kajabi_contact = kajabi_service.create_contact(
+                email = contact.email,
+                name  = full_name,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Kajabi create failed: {str(e)}")
+
+        if not kajabi_contact or not kajabi_contact.get("kajabi_id"):
+            raise HTTPException(status_code=502, detail="Kajabi did not return a contact id")
+
+        contact.kajabi_id = kajabi_contact["kajabi_id"]
+        created = True
+
+        db.add(SyncLog(
+            id=str(uuid.uuid4()), contact_id=contact.id, platform="kajabi",
+            action="contact_pushed", tag="close_won_push", status="success",
+        ))
+        db.commit()
+
+    # Step 2 — apply the tag
+    tagged = False
+    try:
+        tagged = kajabi_service.tag_contact_by_name(contact.kajabi_id, tag_name)
+        db.add(SyncLog(
+            id=str(uuid.uuid4()), contact_id=contact.id, platform="kajabi",
+            action="add_tag", tag=tag_name,
+            status="success" if tagged else "failed",
+        ))
+        db.commit()
+    except Exception as e:
+        print(f"[Kajabi push] Tag error: {e}")
+
+    return {
+        "status":            "pushed",
+        "kajabi_id":         contact.kajabi_id,
+        "created_in_kajabi": created,
+        "tagged":            tagged,
+        "tag":               tag_name,
+    }

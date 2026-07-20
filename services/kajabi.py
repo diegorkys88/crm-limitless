@@ -218,6 +218,66 @@ class KajabiService:
             return False
         return self.add_tag(contact_id, tag_id)
 
+    def create_contact(self, email: str, name: str = None) -> dict | None:
+        """
+        Create a contact in Kajabi (JSON:API format, site relationship required).
+        Returns the created contact normalized, or the existing one if the email
+        is already registered in Kajabi (409/422 duplicate).
+        """
+        site_id = self.get_site_id()
+        if not site_id:
+            raise Exception("Could not determine site_id — cannot create contact")
+
+        attributes = {"email": email}
+        if name:
+            attributes["name"] = name
+
+        payload = {
+            "data": {
+                "type":       "contacts",
+                "attributes": attributes,
+                "relationships": {
+                    "site": {"data": {"type": "sites", "id": site_id}}
+                }
+            }
+        }
+
+        with httpx.Client(timeout=15) as client:
+            resp = client.post(
+                f"{KAJABI_API_BASE}/contacts",
+                json=payload,
+                headers=self._headers(),
+            )
+
+        if resp.status_code in (200, 201):
+            return self._normalize_contact(resp.json().get("data", {}))
+
+        # Duplicate — Kajabi already has this email, find and return it
+        if resp.status_code in (409, 422):
+            found = self.find_contact_by_email(email)
+            if found:
+                return found
+
+        raise Exception(f"Kajabi create_contact failed: {resp.status_code} — {resp.text}")
+
+    def find_contact_by_email(self, email: str) -> dict | None:
+        """Search Kajabi contacts by email filter"""
+        params = {"filter[email]": email, "page[size]": 1}
+        site_id = self.get_site_id()
+        if site_id:
+            params["filter[site_id]"] = site_id
+
+        with httpx.Client(timeout=15) as client:
+            resp = client.get(
+                f"{KAJABI_API_BASE}/contacts",
+                params=params,
+                headers=self._headers(),
+            )
+        if resp.status_code != 200:
+            return None
+        data = resp.json().get("data", [])
+        return self._normalize_contact(data[0]) if data else None
+
     # ── Webhooks ───────────────────────────────────────────────────────────────
     def list_webhooks(self) -> list[dict]:
         """GET /v1/hooks — list all registered webhooks"""

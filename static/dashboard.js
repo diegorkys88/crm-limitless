@@ -1200,11 +1200,17 @@ async function closeContact(result) {
     });
 
     if (r.ok) {
-      // Add crm-closed tag in Kajabi
+      // Push to Kajabi (creates the contact there if needed) + crm-closed tag
       if (result === 'won') {
-        await fetch(`${API}/sync/kajabi/tag/${currentContact.id}?tag_name=crm-closed`, {
-          method: 'POST', headers: authHeaders()
-        });
+        try {
+          const pr = await fetch(`${API}/sync/kajabi/push/${currentContact.id}?tag_name=crm-closed`, {
+            method: 'POST', headers: authHeaders()
+          });
+          const pd = await pr.json();
+          if (pr.ok && pd.created_in_kajabi) {
+            showNotif('Synced to Kajabi', 'Contact created in Kajabi with crm-closed tag');
+          }
+        } catch (e) { console.warn('Kajabi push failed', e); }
       }
       res.style.color = result === 'won' ? 'var(--green)' : 'var(--hot)';
       res.textContent = `✓ Marked as ${label}`;
