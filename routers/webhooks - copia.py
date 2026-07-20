@@ -18,69 +18,61 @@ async def calendly_webhook(
 ):
     """
     Calendly fires this when someone books or cancels a meeting.
-    Real payload: {"event": "invitee.created", "payload": {"invitee": {...}, "scheduled_event": {...}, "tracking": {...}}}
+    The contact_id comes in utm_content parameter we added to the link.
     """
     payload = await request.json()
-    print(f"[Calendly webhook] FULL PAYLOAD: {payload}")
-
-    event = payload.get("event")
-    data  = payload.get("payload", {})
+    event   = payload.get("event")
+    data    = payload.get("payload", {})
 
     if event == "invitee.created":
         return await _handle_booking(data, background_tasks, db)
+
     elif event == "invitee.canceled":
         return await _handle_cancellation(data, db)
 
-    return {"status": "ignored", "event": event}
+    return {"status": "ok", "event": event}
 
 
-async def _handle_booking(data: dict, background_tasks, db: Session):
+async def _handle_booking(data: dict, background_tasks: BackgroundTasks, db: Session):
     """Someone booked a meeting"""
 
-    # Real Calendly payload structure:
-    # data = { "invitee": {...}, "event": "<uri string>", "scheduled_event": {...}, "tracking": {...} }
-    invitee  = data.get("invitee", {}) if isinstance(data.get("invitee"), dict) else {}
-    tracking = data.get("tracking", {}) if isinstance(data.get("tracking"), dict) else {}
-
-    # Extract contact_id from UTM content (added when we generate the Calendly link)
+    # Extract contact_id from UTM params
     contact_id = (
-        tracking.get("utm_content") or
-        (data.get("utm_params", {}) or {}).get("utm_content")
+        data.get("tracking", {}).get("utm_content") or
+        data.get("utm_params", {}).get("utm_content")
     )
 
-    # Get email — real payload has it in invitee.email
-    email = invitee.get("email") or data.get("email")
-
-    # Find contact by ID first, then by email
+    # Find contact by ID or fall back to email
     contact = None
     if contact_id:
         contact = db.query(Contact).filter(Contact.id == contact_id).first()
 
-    if not contact and email:
-        contact = db.query(Contact).filter(Contact.email == email).first()
+    if not contact:
+        email = data.get("email")
+        if email:
+            contact = db.query(Contact).filter(Contact.email == email).first()
 
-    if not contact and email:
-        # Create new contact from Calendly booking
+    if not contact:
+        # Create a new contact from the Calendly booking
         contact = Contact(
             id         = str(uuid.uuid4()),
-            first_name = invitee.get("first_name") or data.get("first_name"),
-            last_name  = invitee.get("last_name")  or data.get("last_name"),
-            email      = email,
+            first_name = data.get("first_name"),
+            last_name  = data.get("last_name"),
+            email      = data.get("email"),
             source     = "calendly",
             status     = "appointment_scheduled",
         )
         db.add(contact)
         db.flush()
 
-    if not contact:
-        return {"status": "ignored", "reason": "no email in payload"}
-
     # Parse scheduled time
-    # In real Calendly payload, data["event"] is a URI string not a dict.
-    # start_time comes from data["scheduled_event"]["start_time"] (UTC)
+    # In real Calendly payload, data["event"] is a URI string not a dict
+    # The invitee object has the scheduled event details
     scheduled_at = None
+    invitee      = data.get("invitee", {})
     event_uri    = data.get("event", "")
 
+    # Try to get start_time from scheduled_event or invitee
     event_data = data.get("scheduled_event", {})
     if isinstance(event_data, dict):
         start_time = event_data.get("start_time")
@@ -90,15 +82,11 @@ async def _handle_booking(data: dict, background_tasks, db: Session):
     if start_time:
         try:
             scheduled_at = datetime.fromisoformat(str(start_time).replace("Z", "+00:00"))
-            # Store as naive UTC for DB consistency
-            scheduled_at = scheduled_at.replace(tzinfo=None)
         except Exception:
             scheduled_at = None
 
-    # Assign to first active sales rep, fallback to any user
-    assigned_user = db.query(User).filter(
-        User.role == "sales_rep", User.is_active == "true"
-    ).first()
+    # Assign to first available sales rep
+    assigned_user = db.query(User).filter(User.role == "sales_rep", User.is_active == "true").first()
     if not assigned_user:
         assigned_user = db.query(User).first()
 
@@ -141,7 +129,7 @@ async def _handle_booking(data: dict, background_tasks, db: Session):
         except Exception as e:
             print(f"[Kajabi tag] crm-scheduled error: {e}")
 
-    # Generate AI summary synchronously
+    # Generate AI summary synchronously — avoids SQLite threading issues
     summary = None
     try:
         from agents.scheduler import scheduler_agent
@@ -157,19 +145,9 @@ async def _handle_booking(data: dict, background_tasks, db: Session):
         try:
             from services.email import email_service
             import os
-            from zoneinfo import ZoneInfo
-            from datetime import timezone as tz
-
-            if scheduled_at:
-                # DB stores naive UTC — attach UTC then convert to business timezone
-                aware = scheduled_at.replace(tzinfo=tz.utc)
-                local = aware.astimezone(ZoneInfo("America/New_York"))
-                scheduled_str = local.strftime("%B %d, %Y at %I:%M %p ET")
-            else:
-                scheduled_str = "TBD"
-
-            contact_name = f"{contact.first_name or ''} {contact.last_name or ''}".strip() or contact.email
-            crm_url      = os.getenv("CRM_URL", "https://web-production-5bd62.up.railway.app")
+            scheduled_str = scheduled_at.strftime("%B %d, %Y at %I:%M %p") if scheduled_at else "TBD"
+            contact_name  = f"{contact.first_name or ''} {contact.last_name or ''}".strip() or contact.email
+            crm_url       = os.getenv("CRM_URL", "https://web-production-5bd62.up.railway.app/dashboard")
 
             body = f"""Hi {assigned_user.name},
 
@@ -185,7 +163,7 @@ Scheduled: {scheduled_str}
 
 ---
 
-View contact in CRM: {crm_url}/dashboard
+View contact in CRM: {crm_url}
 
 The Leadership Coaching Team"""
 
@@ -201,11 +179,13 @@ The Leadership Coaching Team"""
             print(f"[Scheduler] Briefing email error: {e}")
 
     return {
-        "status":         "appointment_created",
-        "appointment_id": appt.id,
+        "status":         "booked",
         "contact_id":     contact.id,
+        "appointment_id": appt.id,
+        "scheduled_at":   str(scheduled_at),
         "assigned_to":    assigned_user.name if assigned_user else None,
     }
+
 
 async def _handle_cancellation(data: dict, db: Session):
     """Someone cancelled a meeting"""

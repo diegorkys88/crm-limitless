@@ -135,7 +135,7 @@ function renderDashboardAppts() {
   }
   container.innerHTML = upcoming.map(a => {
     const contact  = allContacts.find(c => c.id === a.contact_id) || {};
-    const dt       = a.scheduled_at ? parseUTC(a.scheduled_at) : null;
+    const dt       = a.scheduled_at ? new Date(a.scheduled_at) : null;
     const day      = dt ? dt.getDate() : '—';
     const month    = dt ? dt.toLocaleString('en', {month:'short'}).toUpperCase() : '';
     const time     = dt ? dt.toLocaleTimeString('en', {hour:'2-digit',minute:'2-digit'}) : '';
@@ -433,7 +433,7 @@ function renderAppointmentsTable() {
   }
   tbody.innerHTML = allAppointments.map(a => {
     const c  = allContacts.find(x => x.id === a.contact_id) || {};
-    const dt = a.scheduled_at ? parseUTC(a.scheduled_at) : null;
+    const dt = a.scheduled_at ? new Date(a.scheduled_at) : null;
     return `<tr onclick="openDetail('${c.id}')" class="fade-in">
       <td><div class="contact-cell">
         <div class="contact-avatar" style="background:${avatarColor(c.id||'0')}">${initials(c)}</div>
@@ -451,12 +451,6 @@ function renderAppointmentsTable() {
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
-function parseUTC(dt) {
-  if (!dt) return null;
-  // Backend stores UTC but sends without timezone marker — add Z so JS converts to local
-  const s = String(dt);
-  return new Date(s.match(/Z|[+-]\d{2}:\d{2}$/) ? s : s + 'Z');
-}
 function getUserName(userId) {
   if (!userId) return '—';
   const user = allUsers.find(u => u.id === userId);
@@ -664,26 +658,10 @@ async function simulateBooking() {
 }
 
 async function enrichContact() {
-if (d.status === 'enriched') {
-      res.style.color = 'var(--green)';
-      res.textContent = `✓ Updated: ${d.updated_fields.join(', ')}`;
-
-      // Refresh data and update the open panel live
-      const contactId = currentContact.id;
-      await loadData();
-      currentContact = allContacts.find(c => c.id === contactId);
-      if (currentContact) {
-        const c = currentContact;
-        document.getElementById('d-title').textContent    = `${c.title || '—'} · ${c.company || '—'}`;
-        document.getElementById('d-company-input').value  = c.company  || '';
-        document.getElementById('d-region-input').value   = c.region   || '';
-        document.getElementById('d-title-input').value    = c.title    || '';
-        document.getElementById('d-industry-input').value = c.industry || '';
-        document.getElementById('d-score').innerHTML      = scoreHTML(c.score);
-        document.getElementById('d-status').innerHTML     = statusHTML(c.status);
-        document.getElementById('d-save-btn').style.display = 'none';
-      }
-    } else if (d.status === 'matched_no_data') {
+  if (!currentContact) return;
+  const res = document.getElementById('d-action-result');
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Enriching with Apollo...';
   try {
     const r = await fetch(`${API}/sync/apollo/enrich/${currentContact.id}`, {method:'POST', headers:authHeaders()});
     const d = await r.json();
@@ -691,6 +669,7 @@ if (d.status === 'enriched') {
     res.textContent = d.status === 'enriched'
       ? `✓ Updated: ${d.updated_fields.join(', ')}`
       : 'No data found in Apollo';
+    if (d.status === 'enriched') await loadData();
   } catch(e) {
     res.style.color = 'var(--hot)';
     res.textContent = 'Apollo enrichment error';
