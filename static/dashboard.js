@@ -664,7 +664,16 @@ async function simulateBooking() {
 }
 
 async function enrichContact() {
-if (d.status === 'enriched') {
+  if (!currentContact) return;
+  const res = document.getElementById('d-action-result');
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Enriching with Apollo...';
+
+  try {
+    const r = await fetch(`${API}/sync/apollo/enrich/${currentContact.id}`, {method:'POST', headers:authHeaders()});
+    const d = await r.json();
+
+    if (d.status === 'enriched') {
       res.style.color = 'var(--green)';
       res.textContent = `✓ Updated: ${d.updated_fields.join(', ')}`;
 
@@ -684,13 +693,12 @@ if (d.status === 'enriched') {
         document.getElementById('d-save-btn').style.display = 'none';
       }
     } else if (d.status === 'matched_no_data') {
-  try {
-    const r = await fetch(`${API}/sync/apollo/enrich/${currentContact.id}`, {method:'POST', headers:authHeaders()});
-    const d = await r.json();
-    res.style.color = d.status === 'enriched' ? 'var(--green)' : 'var(--muted)';
-    res.textContent = d.status === 'enriched'
-      ? `✓ Updated: ${d.updated_fields.join(', ')}`
-      : 'No data found in Apollo';
+      res.style.color = 'var(--warm)';
+      res.textContent = '⚠ Apollo found this person but has no title/company data. Fill Title manually to score them.';
+    } else {
+      res.style.color = 'var(--muted)';
+      res.textContent = 'No data found in Apollo';
+    }
   } catch(e) {
     res.style.color = 'var(--hot)';
     res.textContent = 'Apollo enrichment error';
