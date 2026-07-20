@@ -19,7 +19,9 @@ async function loadData() {
     ]);
     allUsers = Array.isArray(users) ? users : [];
 
-    allContacts    = contacts;
+    // Newest first
+    allContacts    = (Array.isArray(contacts) ? contacts : []).sort((a, b) =>
+      new Date(b.created_at || 0) - new Date(a.created_at || 0));
     allAppointments = appts;
     allOutreach    = outreach;
 
@@ -108,7 +110,7 @@ function avatarColor(id) {
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function renderDashboardContacts() {
   const tbody = document.getElementById('dashboard-contacts-body');
-  const recent = [...allContacts].reverse().slice(0, 8);
+  const recent = allContacts.slice(0, 8);
   if (!recent.length) {
     tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><p>No contacts yet. Add one or import from Kajabi.</p></div></td></tr>`;
     return;
@@ -224,7 +226,7 @@ function renderContactsTable(contacts, resetPage = false) {
     <tr onclick="openDetail('${c.id}')" class="fade-in">
       <td><div class="contact-cell">
         <div class="contact-avatar" style="background:${avatarColor(c.id)}">${initials(c)}</div>
-        <div><div class="contact-name">${c.first_name || ''} ${c.last_name || ''}</div>
+        <div><div class="contact-name">${c.first_name || ''} ${c.last_name || ''}${newBadge(c)}</div>
         <div class="contact-company">${c.email}</div></div>
       </div></td>
       <td style="color:var(--muted);font-size:12px">${c.title || '—'}</td>
@@ -322,33 +324,120 @@ function applyFilters() {
     filtered = filtered.filter(c => c.source === currentSource);
   if (currentSearch)
     filtered = filtered.filter(c =>
-      `${c.first_name} ${c.last_name} ${c.email} ${c.company}`.toLowerCase().includes(currentSearch));
+      `${c.first_name || ''} ${c.last_name || ''} ${c.email || ''} ${c.company || ''} ${c.title || ''}`.toLowerCase().includes(currentSearch));
   renderContactsTable(filtered);
 }
 
 // ── OUTREACH TABLE ────────────────────────────────────────────────────────────
 function renderOutreachTable() {
   const tbody = document.getElementById('outreach-body');
-  if (!allOutreach.length) {
-    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No outreach yet</p></div></td></tr>`;
-    return;
+
+  // Filter
+  let filtered = allOutreach;
+  if (currentOutreachFilter === 'draft')
+    filtered = filtered.filter(o => o.status === 'draft' || o.status === 'pending_approval');
+  else if (currentOutreachFilter === 'sent')
+    filtered = filtered.filter(o => o.status !== 'draft' && o.status !== 'pending_approval');
+
+  // Search by contact name/email/subject
+  if (currentOutreachSearch) {
+    filtered = filtered.filter(o => {
+      const c = allContacts.find(x => x.id === o.contact_id) || {};
+      return `${c.first_name || ''} ${c.last_name || ''} ${c.email || ''} ${o.subject || ''}`
+        .toLowerCase().includes(currentOutreachSearch);
+    });
   }
-  tbody.innerHTML = allOutreach.map(o => {
-    const c = allContacts.find(x => x.id === o.contact_id) || {};
-    return `<tr class="fade-in" onclick="openEmailModal('${o.id}')" style="cursor:pointer">
-      <td><div class="contact-cell">
-        <div class="contact-avatar" style="background:${avatarColor(c.id || '0')}">${initials(c)}</div>
-        <div><div class="contact-name">${c.first_name || ''} ${c.last_name || ''}</div>
-        <div class="contact-company">${c.email || ''}</div></div>
-      </div></td>
-      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.subject || '—'}</td>
-      <td>${statusHTML(o.status)}</td>
-      <td style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">${o.sent_at ? new Date(o.sent_at).toLocaleDateString() : '—'}</td>
-      <td>${o.status === 'draft'
-        ? `<button class="action-btn" onclick="event.stopPropagation();openEmailModal('${o.id}')">Review & Send</button>`
-        : '<span style="font-size:11px;color:var(--muted)">Sent</span>'}</td>
-    </tr>`;
-  }).join('');
+
+  // Sort newest first
+  filtered = [...filtered].sort((a, b) =>
+    new Date(b.sent_at || b.created_at || 0) - new Date(a.sent_at || a.created_at || 0));
+
+  // Paginate
+  const total = filtered.length;
+  const pages = Math.ceil(total / OUTREACH_PER_PAGE) || 1;
+  if (currentOutreachPage > pages) currentOutreachPage = pages;
+  const startIdx  = (currentOutreachPage - 1) * OUTREACH_PER_PAGE;
+  const paginated = filtered.slice(startIdx, startIdx + OUTREACH_PER_PAGE);
+
+  const countEl = document.getElementById('outreach-count');
+  if (countEl) countEl.textContent = `${total} emails — page ${currentOutreachPage} of ${pages}`;
+
+  if (!paginated.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No outreach found</p></div></td></tr>`;
+  } else {
+    tbody.innerHTML = paginated.map(o => {
+      const c = allContacts.find(x => x.id === o.contact_id) || {};
+      return `<tr class="fade-in" onclick="openEmailModal('${o.id}')" style="cursor:pointer">
+        <td><div class="contact-cell">
+          <div class="contact-avatar" style="background:${avatarColor(c.id || '0')}">${initials(c)}</div>
+          <div><div class="contact-name">${c.first_name || ''} ${c.last_name || ''}</div>
+          <div class="contact-company">${c.email || ''}</div></div>
+        </div></td>
+        <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.subject || '—'}</td>
+        <td>${statusHTML(o.status)}</td>
+        <td style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">${o.sent_at ? new Date(o.sent_at).toLocaleDateString() : '—'}</td>
+        <td>${o.status === 'draft'
+          ? `<button class="action-btn" onclick="event.stopPropagation();openEmailModal('${o.id}')">Review & Send</button>`
+          : '<span style="font-size:11px;color:var(--muted)">Sent</span>'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Pagination controls
+  const existing = document.getElementById('outreach-pagination');
+  if (existing) existing.remove();
+  if (pages > 1) {
+    const panel = document.querySelector('#page-outreach .panel');
+    const pag = document.createElement('div');
+    pag.id = 'outreach-pagination';
+    pag.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 20px;border-top:1px solid var(--border)';
+
+    const prevDisabled = currentOutreachPage <= 1 ? 'disabled style="opacity:0.4"' : '';
+    const nextDisabled = currentOutreachPage >= pages ? 'disabled style="opacity:0.4"' : '';
+
+    let pageButtons = '';
+    const s = Math.max(1, currentOutreachPage - 2);
+    const e = Math.min(pages, currentOutreachPage + 2);
+    if (s > 1) pageButtons += `<button class="action-btn" onclick="goToOutreachPage(1, event)">1</button><span style="color:var(--muted)">…</span>`;
+    for (let i = s; i <= e; i++) {
+      const active = i === currentOutreachPage ? 'style="background:var(--white);color:var(--black);border-color:var(--white)"' : '';
+      pageButtons += `<button class="action-btn" ${active} onclick="goToOutreachPage(${i}, event)">${i}</button>`;
+    }
+    if (e < pages) pageButtons += `<span style="color:var(--muted)">…</span><button class="action-btn" onclick="goToOutreachPage(${pages}, event)">${pages}</button>`;
+
+    pag.innerHTML = `
+      <button class="action-btn" ${prevDisabled} onclick="goToOutreachPage(${currentOutreachPage - 1}, event)">← Prev</button>
+      ${pageButtons}
+      <button class="action-btn" ${nextDisabled} onclick="goToOutreachPage(${currentOutreachPage + 1}, event)">Next →</button>
+    `;
+    panel.appendChild(pag);
+  }
+}
+
+// ── OUTREACH FILTERS + PAGINATION ────────────────────────────────────────────
+let currentOutreachFilter = 'all';
+let currentOutreachSearch = '';
+let currentOutreachPage   = 1;
+const OUTREACH_PER_PAGE   = 50;
+
+function filterOutreach(filter, el) {
+  currentOutreachFilter = filter;
+  currentOutreachPage = 1;
+  document.querySelectorAll('#page-outreach .filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderOutreachTable();
+}
+
+function searchOutreach(val) {
+  currentOutreachSearch = val.toLowerCase();
+  currentOutreachPage = 1;
+  renderOutreachTable();
+}
+
+function goToOutreachPage(page, event) {
+  if (event) event.stopPropagation();
+  currentOutreachPage = page;
+  renderOutreachTable();
 }
 
 // ── EMAIL REVIEW MODAL ────────────────────────────────────────────────────────
@@ -464,6 +553,19 @@ function getUserName(userId) {
 }
 
 // ── CONTACT DETAIL ────────────────────────────────────────────────────────────
+function isNewContact(c) {
+  // NEW = created less than 48h ago and not yet contacted
+  if (!c.created_at || c.status !== 'pending') return false;
+  const created = new Date(String(c.created_at).match(/Z|[+-]\d{2}:\d{2}$/) ? c.created_at : c.created_at + 'Z');
+  return (Date.now() - created.getTime()) < 48 * 60 * 60 * 1000;
+}
+
+function newBadge(c) {
+  return isNewContact(c)
+    ? '<span style="background:rgba(46,204,113,0.15);color:var(--green);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:1px;font-family:var(--font-mono);margin-left:6px">NEW</span>'
+    : '';
+}
+
 function subscribedHTML(subscribed) {
   if (subscribed === 'true')  return '<span style="color:var(--green)">✓ Subscribed</span>';
   if (subscribed === 'false') return '<span style="color:var(--hot)">✗ Not subscribed</span>';
@@ -634,33 +736,6 @@ async function sendOutreach(outreachId) {
   const r = await fetch(`${API}/outreach/${outreachId}/send?sender_name=Diego`, {method:'POST', headers:authHeaders()});
   const d = await r.json();
   if (r.ok) { showNotif('Email Sent!', `Delivered successfully`); await loadData(); renderOutreachTable(); }
-}
-
-async function simulateBooking() {
-  if (!currentContact) return;
-  const res = document.getElementById('d-action-result');
-  res.style.color = 'var(--muted)';
-  res.textContent = 'Simulating booking...';
-  const dt = new Date(); dt.setDate(dt.getDate() + 7);
-  const iso = dt.toISOString().replace('.000Z','Z');
-  try {
-    const r = await fetch(`${API}/webhooks/calendly/simulate?contact_id=${currentContact.id}&scheduled_at=${iso}`, {method:'POST', headers:authHeaders()});
-    const d = await r.json();
-    if (r.ok) {
-      res.style.color = 'var(--green)';
-      res.textContent = `✓ Appointment created\nAI briefing generated\nAssigned to: ${d.assigned_to}`;
-      showNotif('Meeting Booked!', `${currentContact.first_name} scheduled for ${new Date(iso).toLocaleDateString()}`);
-      await loadData();
-      const appt = allAppointments.find(a => a.id === d.appointment_id);
-      if (appt?.ai_summary) {
-        document.getElementById('d-summary-section').style.display = 'block';
-        document.getElementById('d-summary').textContent = appt.ai_summary;
-      }
-    }
-  } catch(e) {
-    res.style.color = 'var(--hot)';
-    res.textContent = 'Error simulating booking';
-  }
 }
 
 async function enrichContact() {

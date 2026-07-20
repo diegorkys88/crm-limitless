@@ -264,6 +264,13 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">OUTREACH</div>
+          <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono)" id="outreach-count"></span>
+        </div>
+        <div class="filter-row">
+          <button class="filter-chip active" onclick="filterOutreach('all', this)">All</button>
+          <button class="filter-chip" onclick="filterOutreach('draft', this)">Draft</button>
+          <button class="filter-chip" onclick="filterOutreach('sent', this)">Sent</button>
+          <input class="search-input" type="text" placeholder="Search outreach..." oninput="searchOutreach(this.value)">
         </div>
         <table>
           <thead>
@@ -514,7 +521,6 @@
 
       <div class="detail-actions">
         <button class="btn btn-primary" id="d-generate-btn" onclick="generateOutreach()">Generate Outreach</button>
-        <button class="btn btn-ghost" onclick="simulateBooking()">Simulate Booking</button>
         <button class="btn btn-ghost" onclick="enrichContact()">Enrich (Apollo)</button>
       </div>
       <div class="detail-actions" style="margin-top:8px">
