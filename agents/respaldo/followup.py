@@ -28,39 +28,6 @@ Format:
 class FollowUpAgent(BaseAgent):
     name = "follow_up"
 
-    def _parse_json(self, raw: str, contact) -> dict:
-        """
-        Robustly extract the JSON object from Claude's response.
-        Handles markdown code fences (```json ... ```) and surrounding text.
-        """
-        import re
-        text = (raw or "").strip()
-
-        # Strip markdown code fences
-        if text.startswith("```"):
-            text = re.sub(r"^```(?:json)?\s*", "", text)
-            text = re.sub(r"\s*```$", "", text).strip()
-
-        # Try direct parse
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        # Fallback: grab the first {...} block
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except json.JSONDecodeError:
-                pass
-
-        # Last resort: use raw as body
-        return {
-            "subject": f"Quick follow-up — {contact.company or 'your team'}",
-            "body": text
-        }
-
     def write_followup(self, contact, original_outreach, days_since: int, db) -> dict:
         """
         Writes a follow-up email for a contact that hasn't responded.
@@ -86,7 +53,13 @@ Calendly placeholder: [CALENDLY_LINK]
             max_tokens    = 400
         )
 
-        result = self._parse_json(raw, contact)
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            result = {
+                "subject": f"Quick follow-up — {contact.company or 'your team'}",
+                "body": raw
+            }
 
         # Replace Calendly placeholder
         if original_outreach.calendly_link:
