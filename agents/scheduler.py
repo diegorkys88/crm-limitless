@@ -26,6 +26,19 @@ class SchedulerAgent(BaseAgent):
         """
         Generates a pre-meeting briefing for the sales rep.
         """
+        # Convert stored UTC time to business timezone (Eastern) for the briefing
+        scheduled_display = "TBD"
+        if appointment.scheduled_at:
+            try:
+                from zoneinfo import ZoneInfo
+                from datetime import timezone as _tz
+                dt = appointment.scheduled_at
+                aware = dt.replace(tzinfo=_tz.utc) if dt.tzinfo is None else dt
+                local = aware.astimezone(ZoneInfo("America/New_York"))
+                scheduled_display = local.strftime("%B %d, %Y at %I:%M %p ET")
+            except Exception:
+                scheduled_display = str(appointment.scheduled_at)
+
         profile = f"""
 Prepare a pre-meeting briefing for this appointment:
 
@@ -40,7 +53,7 @@ CONTACT:
 - Status:   {contact.status}
 
 MEETING:
-- Scheduled: {appointment.scheduled_at}
+- Scheduled: {scheduled_display}
 """
         summary = self.run(
             prompt        = profile,

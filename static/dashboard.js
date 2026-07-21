@@ -592,6 +592,10 @@ function openDetail(id) {
   document.getElementById('d-action-result').textContent = '';
   document.getElementById('d-save-btn').style.display = 'none';
 
+  // Follow Up button: only for contacts already emailed but not yet scheduled/closed
+  const fBtn = document.getElementById('d-followup-btn');
+  if (fBtn) fBtn.style.display = (c.status === 'outreach_sent') ? 'inline-flex' : 'none';
+
   // Check for AI summary
   const appt = allAppointments.find(a => a.contact_id === id && a.ai_summary);
   if (appt) {
@@ -1221,6 +1225,64 @@ async function closeContact(result) {
   } catch (e) {
     res.style.color = 'var(--hot)';
     res.textContent = 'Error updating contact';
+  }
+}
+
+// ── FOLLOW UP ─────────────────────────────────────────────────────────────────
+async function generateFollowup() {
+  if (!currentContact) return;
+  const btn = document.getElementById('d-followup-btn');
+  const res = document.getElementById('d-action-result');
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Writing follow-up...';
+
+  try {
+    const r = await fetch(`${API}/outreach/followup/${currentContact.id}`, {method:'POST', headers:authHeaders()});
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ Follow-up draft created (day ${d.days_since}). Review & send it in the Outreach tab.`;
+      showNotif('Follow-up ready', 'Draft created — review it in Outreach');
+      await loadData();
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not generate follow-up';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Follow Up';
+  }
+}
+
+async function runBatchFollowup() {
+  const res = document.getElementById('batch-followup-result');
+  if (!confirm('Generate follow-up drafts for all contacted leads with no reply (last email 5+ days ago)?\n\nThey will be created as drafts for you to review before sending.')) return;
+
+  res.style.color = 'var(--muted)';
+  res.style.padding = '10px 20px';
+  res.textContent = 'Generating follow-up drafts... this may take a moment.';
+
+  try {
+    const r = await fetch(`${API}/outreach/followup/batch/generate?days_since_min=5&limit=50`, {method:'POST', headers:authHeaders()});
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ ${d.drafts_created} drafts created, ${d.skipped} skipped. Review them below and send.`;
+      showNotif('Follow-ups generated', `${d.drafts_created} drafts ready to review`);
+      await loadData();
+      renderOutreachTable();
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Batch failed';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
   }
 }
 
