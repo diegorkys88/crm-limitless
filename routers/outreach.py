@@ -373,6 +373,16 @@ def batch_generate_followups(
 EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Your Company")
 
 
+@router.delete("/{outreach_id}", status_code=204)
+def delete_outreach(outreach_id: str, db: Session = Depends(get_db)):
+    """Delete an outreach record (draft or sent)."""
+    outreach = db.query(Outreach).filter(Outreach.id == outreach_id).first()
+    if not outreach:
+        raise HTTPException(status_code=404, detail="Outreach not found")
+    db.delete(outreach)
+    db.commit()
+
+
 @router.patch("/{outreach_id}")
 def update_outreach(
     outreach_id: str,

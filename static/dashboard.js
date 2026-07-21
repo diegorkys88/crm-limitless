@@ -376,9 +376,12 @@ function renderOutreachTable() {
         <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.subject || '—'}</td>
         <td>${statusHTML(o.status)}</td>
         <td style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">${o.sent_at ? new Date(o.sent_at).toLocaleDateString() : '—'}</td>
-        <td>${o.status === 'draft'
-          ? `<button class="action-btn" onclick="event.stopPropagation();openEmailModal('${o.id}')">Review & Send</button>`
-          : '<span style="font-size:11px;color:var(--muted)">Sent</span>'}</td>
+        <td>
+          ${o.status === 'draft'
+            ? `<button class="action-btn" onclick="event.stopPropagation();openEmailModal('${o.id}')">Review & Send</button>`
+            : '<span style="font-size:11px;color:var(--muted)">Sent</span>'}
+          <button class="action-btn" onclick="event.stopPropagation();deleteOutreach('${o.id}')" style="margin-left:6px;color:var(--hot);border-color:transparent" title="Delete">🗑</button>
+        </td>
       </tr>`;
     }).join('');
   }
@@ -438,6 +441,28 @@ function goToOutreachPage(page, event) {
   if (event) event.stopPropagation();
   currentOutreachPage = page;
   renderOutreachTable();
+}
+
+async function deleteOutreach(outreachId) {
+  const o = allOutreach.find(x => x.id === outreachId);
+  const c = o ? (allContacts.find(x => x.id === o.contact_id) || {}) : {};
+  const who = `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'this contact';
+  if (!confirm(`Delete this outreach email for ${who}?`)) return;
+
+  try {
+    const r = await fetch(`${API}/outreach/${outreachId}`, {method:'DELETE', headers:authHeaders()});
+    if (r.ok || r.status === 204) {
+      showNotif('Deleted', 'Outreach email removed');
+      allOutreach = allOutreach.filter(x => x.id !== outreachId);
+      renderOutreachTable();
+      await loadData();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      showNotif('Error', d.detail || 'Could not delete');
+    }
+  } catch (e) {
+    showNotif('Error', 'Connection error');
+  }
 }
 
 // ── EMAIL REVIEW MODAL ────────────────────────────────────────────────────────
