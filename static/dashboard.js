@@ -993,6 +993,12 @@ async function doLogin() {
       showApp();
     } else {
       errEl.textContent = d.detail || 'Invalid email or password';
+      // Highlight lockout messages more prominently
+      if (r.status === 429) {
+        errEl.style.fontWeight = '600';
+      } else {
+        errEl.style.fontWeight = '';
+      }
     }
   } catch(e) {
     errEl.textContent = 'Connection error — is the server running?';

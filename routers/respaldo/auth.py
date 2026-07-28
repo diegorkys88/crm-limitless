@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional
@@ -8,40 +8,6 @@ from auth import hash_password, verify_password, create_token, get_current_user,
 import uuid
 
 router = APIRouter()
-
-# ── Brute-force protection: track failed login attempts per IP + email ──
-from collections import defaultdict
-from time import time as _now
-
-_FAILED = defaultdict(list)      # key (ip|email) -> [timestamps of failures]
-_MAX_FAILS   = 5                 # allowed failures
-_LOCK_WINDOW = 15 * 60           # within 15 minutes → lock
-_LOCK_TIME   = 15 * 60           # lock duration (seconds)
-
-
-def _login_key(ip: str, email: str) -> str:
-    return f"{ip}|{(email or '').lower()}"
-
-
-def _is_locked(key: str) -> int:
-    """Return seconds remaining if locked, else 0."""
-    now = _now()
-    fails = [t for t in _FAILED[key] if now - t < _LOCK_WINDOW]
-    _FAILED[key] = fails
-    if len(fails) >= _MAX_FAILS:
-        # locked until the oldest relevant failure ages out
-        unlock_at = fails[0] + _LOCK_TIME
-        remaining = int(unlock_at - now)
-        return max(remaining, 0)
-    return 0
-
-
-def _record_fail(key: str):
-    _FAILED[key].append(_now())
-
-
-def _clear_fails(key: str):
-    _FAILED.pop(key, None)
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -71,34 +37,14 @@ class UserOut(BaseModel):
 
 # ── Login ──────────────────────────────────────────────────────────────────────
 @router.post("/login")
-def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
+def login(data: LoginRequest, db: Session = Depends(get_db)):
     """
     Login with email and password.
     Returns a JWT token valid for 24 hours.
-    Protected against brute-force: after 5 failed attempts from the same
-    IP+email within 15 minutes, further attempts are locked for 15 minutes.
     """
-    # Resolve client IP (respect Railway's proxy header)
-    client_ip = request.client.host if request.client else "unknown"
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        client_ip = fwd.split(",")[0].strip()
-
-    key = _login_key(client_ip, data.email)
-
-    # Check lock
-    locked_for = _is_locked(key)
-    if locked_for > 0:
-        minutes = (locked_for // 60) + 1
-        raise HTTPException(
-            status_code = status.HTTP_429_TOO_MANY_REQUESTS,
-            detail      = f"Too many failed attempts. Try again in {minutes} minute(s)."
-        )
-
     user = db.query(User).filter(User.email == data.email).first()
 
     if not user or not verify_password(data.password, user.hashed_password):
-        _record_fail(key)
         raise HTTPException(
             status_code = status.HTTP_401_UNAUTHORIZED,
             detail      = "Invalid email or password"
@@ -106,9 +52,6 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
     if user.is_active == "false":
         raise HTTPException(status_code=403, detail="Account is inactive")
-
-    # Success — clear any failed attempts for this key
-    _clear_fails(key)
 
     token = create_token(user.id, user.role)
 

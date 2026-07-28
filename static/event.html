@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Limitless Leadership — Join Us</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black:  #0a0a0a;
+    --white:  #f5f5f0;
+    --blue:   #00187d;
+    --blue-lt:#1a3aa8;
+    --gray:   #161616;
+    --muted:  #7a7a7a;
+    --border: rgba(255,255,255,0.10);
+    --green:  #2ecc71;
+    --hot:    #ff4d2e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--black);
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Ambient glow behind the card — the one risk: a slow breathing halo in brand blue */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 50%; left: 50%;
+    width: 620px; height: 620px;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(0,24,125,0.35) 0%, rgba(0,24,125,0) 68%);
+    animation: breathe 7s ease-in-out infinite;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  @keyframes breathe {
+    0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
+    50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
+  }
+
+  .card {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 440px;
+    text-align: center;
+    animation: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .logo {
+    width: 120px; height: 120px;
+    margin: 0 auto 28px;
+    display: block;
+  }
+
+  .logo img { width: 100%; height: 100%; object-fit: contain; }
+
+  .brand {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 44px;
+    letter-spacing: 3px;
+    line-height: 0.95;
+    margin-bottom: 12px;
+  }
+
+  .tagline {
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--white);
+    font-weight: 600;
+    margin-bottom: 20px;
+    position: relative;
+    display: inline-block;
+    padding-bottom: 20px;
+  }
+
+  .tagline::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 40px; height: 2px;
+    background: var(--blue-lt);
+  }
+
+  .pitch {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--muted);
+    margin-bottom: 32px;
+    font-weight: 300;
+  }
+
+  form { display: flex; flex-direction: column; gap: 14px; }
+
+  .field { text-align: left; }
+
+  label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 7px;
+    font-weight: 500;
+  }
+
+  input {
+    width: 100%;
+    background: var(--gray);
+    border: 1px solid var(--border);
+    color: var(--white);
+    padding: 15px 16px;
+    font-size: 16px;
+    font-family: 'DM Sans', sans-serif;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  input::placeholder { color: #555; }
+
+  input:focus {
+    border-color: var(--blue-lt);
+    box-shadow: 0 0 0 3px rgba(0,24,125,0.25);
+  }
+
+  button {
+    margin-top: 8px;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    padding: 16px;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 2.5px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+
+  button:hover:not(:disabled) { background: var(--blue-lt); }
+  button:active:not(:disabled) { transform: scale(0.98); }
+  button:disabled { opacity: 0.6; cursor: default; }
+
+  .error {
+    color: var(--hot);
+    font-size: 13px;
+    min-height: 16px;
+    margin-top: 2px;
+  }
+
+  .footer {
+    margin-top: 28px;
+    font-size: 11px;
+    color: #444;
+    letter-spacing: 1px;
+  }
+
+  /* ── SUCCESS STATE ─────────────────────────────── */
+  .success {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    max-width: 440px;
+    animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .check-ring {
+    width: 88px; height: 88px;
+    margin: 0 auto 28px;
+    border-radius: 50%;
+    border: 2px solid var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) 0.1s both;
+  }
+
+  .check-ring svg { width: 40px; height: 40px; stroke: var(--green); }
+
+  @keyframes pop {
+    from { transform: scale(0); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  .success h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    letter-spacing: 2px;
+    margin-bottom: 14px;
+  }
+
+  .success p {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--muted);
+    font-weight: 300;
+    margin-bottom: 8px;
+  }
+
+  .success strong { color: var(--white); font-weight: 600; }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 480px) {
+    .brand { font-size: 36px; }
+    .logo { width: 96px; height: 96px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body::before, .card, .success, .check-ring { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- FORM STATE -->
+  <div class="card" id="form-card">
+    <div class="logo">
+      <img src="/static/blanco.png" alt="Limitless Leadership">
+    </div>
+    <div class="brand">LIMITLESS<br>LEADERSHIP</div>
+    <div class="tagline">People + Process = Profit</div>
+    <p class="pitch">
+      We help aspiring leaders unlock potential, build engagement,
+      and drive results. Leave your details and we'll be in touch.
+    </p>
+
+    <form id="event-form" onsubmit="submitForm(event)">
+      <div class="field">
+        <label for="name">Your name</label>
+        <input type="text" id="name" placeholder="Jane Smith" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label for="email">Work email</label>
+        <input type="email" id="email" placeholder="jane@yourcompany.com" autocomplete="email" required>
+        <span style="display:block;font-size:11px;color:var(--muted);margin-top:6px;font-weight:300">Use your company email so we can tailor the conversation to your business.</span>
+      </div>
+
+      <!-- Honeypot: hidden from humans, bots tend to fill it. Do not remove. -->
+      <div style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">
+        <label for="website">Website</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+      </div>
+
+      <button type="submit" id="submit-btn">COUNT ME IN</button>
+      <div class="error" id="error"></div>
+    </form>
+    <div class="footer" ><a style="color: #fff !important;" href="https://www.limitlessleadership.co" target="_blank">WWW.LIMITLESSLEADERSHIP.CO</a></div>
+  </div>
+
+  <!-- SUCCESS STATE -->
+  <div class="success hidden" id="success-card">
+    <div class="check-ring">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    </div>
+    <h2>YOU'RE ON THE LIST</h2>
+    <p>Thanks, <strong id="success-name">there</strong>.</p>
+    <p>Someone from our team will reach out to you soon with a personal invitation to a free discovery conversation.</p>
+    <div class="footer" style="margin-top:32px">LIMITLESS LEADERSHIP · People + Process = Profit</div>
+  </div>
+
+<script>
+  const API = window.location.origin;
+
+  async function submitForm(e) {
+    e.preventDefault();
+    const name  = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const btn   = document.getElementById('submit-btn');
+    const err   = document.getElementById('error');
+
+    err.textContent = '';
+
+    if (!name || !email) {
+      err.textContent = 'Please fill in both fields.';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'SENDING...';
+
+    try {
+      const r = await fetch(`${API}/public/event-signup`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ name, email, website })
+      });
+
+      if (r.ok) {
+        document.getElementById('success-name').textContent = name.split(' ')[0];
+        document.getElementById('form-card').classList.add('hidden');
+        document.getElementById('success-card').classList.remove('hidden');
+      } else {
+        const d = await r.json().catch(() => ({}));
+        err.textContent = d.detail || 'Something went wrong. Please try again.';
+        if (r.status === 429) err.textContent = 'Please wait a moment before trying again.';
+        btn.disabled = false;
+        btn.textContent = 'COUNT ME IN';
+      }
+    } catch (e) {
+      err.textContent = 'Connection problem. Please try again.';
+      btn.disabled = false;
+      btn.textContent = 'COUNT ME IN';
+    }
+  }
+</script>
+</body>
+</html>

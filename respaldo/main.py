@@ -8,7 +8,7 @@ from db_session import engine
 import os
 from dotenv import load_dotenv
 
-from routers import contacts, outreach, appointments, users, sync, webhooks, auth, public
+from routers import contacts, outreach, appointments, users, sync, webhooks, auth
 
 load_dotenv()
 
@@ -36,7 +36,6 @@ app.add_middleware(
 
 # ── Routers ────────────────────────────────────────────────────────────────────
 app.include_router(auth.router,         prefix="/auth",         tags=["Auth"])
-app.include_router(public.router,                               tags=["Public"])
 app.include_router(contacts.router,     prefix="/contacts",     tags=["Contacts"])
 app.include_router(outreach.router,     prefix="/outreach",     tags=["Outreach"])
 app.include_router(appointments.router, prefix="/appointments", tags=["Appointments"])
