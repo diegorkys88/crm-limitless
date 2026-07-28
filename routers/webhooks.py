@@ -61,10 +61,28 @@ async def _handle_booking(data: dict, background_tasks, db: Session):
 
     if not contact and email:
         # Create new contact from Calendly booking
+        # Name may come split (first_name/last_name) OR whole (name/full_name).
+        first = invitee.get("first_name") or data.get("first_name")
+        last  = invitee.get("last_name")  or data.get("last_name")
+
+        if not first:
+            # Try the combined name field Calendly often sends
+            whole = (invitee.get("name") or invitee.get("full_name")
+                     or data.get("name") or "").strip()
+            if whole:
+                parts = whole.split(" ", 1)
+                first = parts[0]
+                last  = parts[1] if len(parts) > 1 else None
+            else:
+                # Last resort: derive a readable first name from the email
+                local = email.split("@")[0]
+                local = local.replace(".", " ").replace("_", " ").replace("-", " ")
+                first = local.split(" ")[0].capitalize() if local else email
+
         contact = Contact(
             id         = str(uuid.uuid4()),
-            first_name = invitee.get("first_name") or data.get("first_name"),
-            last_name  = invitee.get("last_name")  or data.get("last_name"),
+            first_name = first,
+            last_name  = last,
             email      = email,
             source     = "calendly",
             status     = "appointment_scheduled",
