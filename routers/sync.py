@@ -487,3 +487,112 @@ def push_contact_to_kajabi(
         "tagged":            tagged,
         "tag":               tag_name,
     }
+
+
+@router.post("/apollo/enrich/kajabi-batch")
+def enrich_kajabi_batch(
+    limit:        int = Query(50, ge=1, le=100, description="How many contacts to process this run"),
+    only_missing: bool = Query(True, description="Only enrich contacts missing title/company"),
+    db: Session = Depends(get_db),
+):
+    """
+    ECONOMIC batch enrichment for existing contacts (mainly Kajabi).
+    - Only processes contacts with a CORPORATE email (skips gmail/yahoo/hotmail/etc.)
+    - Uses reveal_email=False → does NOT spend email-reveal credits (we already have the email)
+    - Only fills title/company/industry/region when missing
+    - Re-classifies with Claude after enriching
+
+    Run it repeatedly (50 at a time) until it reports processed=0.
+    """
+    from services.apollo import apollo_service
+    from database import Contact, SyncLog
+    import uuid
+
+    FREE_PROVIDERS = {
+        "gmail.com","yahoo.com","hotmail.com","outlook.com","aol.com","icloud.com",
+        "live.com","msn.com","protonmail.com","me.com","comcast.net","sbcglobal.net",
+        "ymail.com","att.net","verizon.net","hotmail.co.uk","gmx.com","mail.com",
+    }
+
+    # Candidates: have an email, corporate domain, not yet enriched via apollo
+    query = db.query(Contact).filter(Contact.email.isnot(None))
+    if only_missing:
+        query = query.filter(
+            (Contact.title.is_(None)) | (Contact.company.is_(None))
+        )
+    # Skip ones we already tagged as apollo-enriched
+    query = query.filter(Contact.apollo_id.is_(None))
+
+    candidates = query.limit(limit * 4).all()  # over-fetch, filter corporates below
+
+    processed  = 0
+    enriched   = 0
+    skipped_free = 0
+    no_data    = 0
+    details    = []
+
+    for contact in candidates:
+        if processed >= limit:
+            break
+
+        domain = contact.email.split("@")[1].lower() if "@" in contact.email else ""
+        if not domain or domain in FREE_PROVIDERS:
+            skipped_free += 1
+            continue
+
+        processed += 1
+
+        try:
+            data = apollo_service.enrich_person(
+                email        = contact.email,
+                first_name   = contact.first_name,
+                last_name    = contact.last_name,
+                domain       = domain,
+                reveal_email = False,   # ECONOMIC — we already have the email
+            )
+        except Exception as e:
+            print(f"[Kajabi enrich] {contact.email}: {e}")
+            continue
+
+        if not data:
+            no_data += 1
+            continue
+
+        # Fill only missing professional fields
+        updated = []
+        for field in ["title", "company", "industry", "region", "apollo_id"]:
+            if not getattr(contact, field, None) and data.get(field):
+                setattr(contact, field, data[field])
+                updated.append(field)
+
+        if updated:
+            enriched += 1
+            details.append(f"{contact.first_name} {contact.last_name}: {', '.join(updated)}")
+            db.add(SyncLog(
+                id=str(uuid.uuid4()), contact_id=contact.id, platform="apollo",
+                action="economic_enrich", tag=",".join(updated), status="success",
+            ))
+        else:
+            no_data += 1
+
+        db.commit()
+
+        # Re-classify with Claude if we added professional data
+        if updated:
+            try:
+                from agents.classifier import classifier_agent
+                db.refresh(contact)
+                classifier_agent.classify(contact, db)
+            except Exception as e:
+                print(f"[Kajabi enrich] classify {contact.email}: {e}")
+
+    return {
+        "status":           "done",
+        "processed":        processed,
+        "enriched":         enriched,
+        "no_data":          no_data,
+        "skipped_free_mail": skipped_free,
+        "details":          details[:20],
+        "message":          f"Processed {processed} corporate contacts, enriched {enriched}. "
+                            f"Run again to continue (returns processed=0 when finished).",
+    }

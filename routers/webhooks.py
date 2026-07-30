@@ -445,9 +445,33 @@ async def kajabi_webhook(request: Request, db: Session = Depends(get_db)):
     ))
     db.commit()
 
+    # Auto-enrich (economic — we already have the email) if corporate domain
+    try:
+        FREE = {"gmail.com","yahoo.com","hotmail.com","outlook.com","aol.com","icloud.com",
+                "live.com","msn.com","protonmail.com","me.com","comcast.net","ymail.com",
+                "att.net","verizon.net","gmx.com","mail.com"}
+        domain = email.split("@")[1].lower() if "@" in email else ""
+        if domain and domain not in FREE:
+            from services.apollo import apollo_service
+            data = apollo_service.enrich_person(
+                email        = contact.email,
+                first_name   = contact.first_name,
+                last_name    = contact.last_name,
+                domain       = domain,
+                reveal_email = False,   # economic — email already known
+            )
+            if data:
+                for field in ["title", "company", "industry", "region", "apollo_id"]:
+                    if not getattr(contact, field, None) and data.get(field):
+                        setattr(contact, field, data[field])
+                db.commit()
+    except Exception as e:
+        print(f"[Kajabi webhook] Auto-enrich error: {e}")
+
     # Auto-classify
     try:
         from agents.classifier import classifier_agent
+        db.refresh(contact)
         classifier_agent.classify(contact, db)
     except Exception as e:
         print(f"[Kajabi webhook] Classifier error: {e}")

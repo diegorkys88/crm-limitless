@@ -73,14 +73,18 @@ class ApolloService:
         domain:       str = None,
         linkedin_url: str = None,
         apollo_id:    str = None,
+        reveal_email: bool = True,
     ) -> dict | None:
         """
-        Enrich one person to get their full profile + verified email.
-        Consumes 1 email credit when an email is revealed.
+        Enrich one person to get their full profile.
+        - reveal_email=True  → also reveals the verified email (costs 1 credit).
+          Use for NEW prospects where we don't have an email yet.
+        - reveal_email=False → "economic" mode: only title/company/industry/region.
+          Use for contacts we ALREADY have an email for (Kajabi). Cheap/free.
         Best match: apollo_id (exact) > email > linkedin_url > name+domain.
         """
         params = [
-            ("reveal_personal_emails", "true"),
+            ("reveal_personal_emails", "true" if reveal_email else "false"),
             ("reveal_phone_number",    "false"),
         ]
         if apollo_id:    params.append(("id",           apollo_id))
