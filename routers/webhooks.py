@@ -461,7 +461,7 @@ async def kajabi_webhook(request: Request, db: Session = Depends(get_db)):
                 reveal_email = False,   # economic — email already known
             )
             if data:
-                for field in ["title", "company", "industry", "region", "apollo_id"]:
+                for field in ["title", "company", "industry", "region", "apollo_id", "phone_corporate", "linkedin_url", "city", "state", "website", "num_employees", "annual_revenue"]:
                     if not getattr(contact, field, None) and data.get(field):
                         setattr(contact, field, data[field])
                 db.commit()

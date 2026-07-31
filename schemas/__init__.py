@@ -50,6 +50,13 @@ class ContactOut(BaseModel):
     clickfunnels_id:  Optional[str]
     apollo_id:        Optional[str]
     subscribed:       Optional[str]
+    phone_corporate:  Optional[str]
+    linkedin_url:     Optional[str]
+    city:             Optional[str]
+    state:            Optional[str]
+    website:          Optional[str]
+    num_employees:    Optional[str]
+    annual_revenue:   Optional[str]
     created_at:       Optional[datetime]
 
     class Config:

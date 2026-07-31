@@ -123,7 +123,7 @@ def enrich_kajabi_batch(
 
         # Fill only missing professional fields
         updated = []
-        for field in ["title", "company", "industry", "region", "apollo_id"]:
+        for field in ["title", "company", "industry", "region", "apollo_id", "phone_corporate", "linkedin_url", "city", "state", "website", "num_employees", "annual_revenue"]:
             if not getattr(contact, field, None) and data.get(field):
                 setattr(contact, field, data[field])
                 updated.append(field)
@@ -187,7 +187,7 @@ def enrich_contact(contact_id: str, db: Session = Depends(get_db)):
         return {"status": "not_found", "message": "Apollo has no data for this contact"}
 
     updated_fields = []
-    for field in ["title", "company", "industry", "region", "linkedin_url", "apollo_id"]:
+    for field in ["title", "company", "industry", "region", "apollo_id", "phone_corporate", "linkedin_url", "city", "state", "website", "num_employees", "annual_revenue"]:
         if not getattr(contact, field, None) and enriched.get(field):
             setattr(contact, field, enriched[field])
             updated_fields.append(field)
@@ -246,7 +246,7 @@ def enrich_bulk(limit: int = Query(10, ge=1, le=10), db: Session = Depends(get_d
         if not enriched or i >= len(contacts):
             continue
         contact = contacts[i]
-        for field in ["title", "company", "industry", "region", "apollo_id"]:
+        for field in ["title", "company", "industry", "region", "apollo_id", "phone_corporate", "linkedin_url", "city", "state", "website", "num_employees", "annual_revenue"]:
             if not getattr(contact, field, None) and enriched.get(field):
                 setattr(contact, field, enriched[field])
         db.add(SyncLog(

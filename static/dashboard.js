@@ -597,6 +597,72 @@ function subscribedHTML(subscribed) {
   return '<span style="color:var(--muted)">— Unknown</span>';
 }
 
+function fmtRevenue(val) {
+  if (!val) return null;
+  const n = parseInt(String(val).replace(/[^0-9]/g, ''), 10);
+  if (!n || isNaN(n)) return null;
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K';
+  return '$' + n;
+}
+
+function fillCompanyDetails(c) {
+  const section = document.getElementById('d-company-section');
+  let hasAny = false;
+
+  // Corporate phone
+  const phoneRow = document.getElementById('d-row-phone');
+  if (c.phone_corporate) {
+    document.getElementById('d-phone').textContent = c.phone_corporate;
+    phoneRow.style.display = ''; hasAny = true;
+  } else { phoneRow.style.display = 'none'; }
+
+  // LinkedIn (as link)
+  const liRow = document.getElementById('d-row-linkedin');
+  if (c.linkedin_url) {
+    const url = c.linkedin_url.startsWith('http') ? c.linkedin_url : 'https://' + c.linkedin_url;
+    document.getElementById('d-linkedin').innerHTML =
+      `<a href="${url}" target="_blank" rel="noopener" style="color:#4a7fff;text-decoration:none">View profile ↗</a>`;
+    liRow.style.display = ''; hasAny = true;
+  } else { liRow.style.display = 'none'; }
+
+  // Website (as link)
+  const wRow = document.getElementById('d-row-website');
+  if (c.website) {
+    const url = c.website.startsWith('http') ? c.website : 'https://' + c.website;
+    const label = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    document.getElementById('d-website').innerHTML =
+      `<a href="${url}" target="_blank" rel="noopener" style="color:#4a7fff;text-decoration:none">${label} ↗</a>`;
+    wRow.style.display = ''; hasAny = true;
+  } else { wRow.style.display = 'none'; }
+
+  // Location (city, state)
+  const locRow = document.getElementById('d-row-location');
+  const loc = [c.city, c.state].filter(Boolean).join(', ');
+  if (loc) {
+    document.getElementById('d-location').textContent = loc;
+    locRow.style.display = ''; hasAny = true;
+  } else { locRow.style.display = 'none'; }
+
+  // Employees
+  const empRow = document.getElementById('d-row-employees');
+  if (c.num_employees) {
+    document.getElementById('d-employees').textContent = c.num_employees + ' employees';
+    empRow.style.display = ''; hasAny = true;
+  } else { empRow.style.display = 'none'; }
+
+  // Revenue
+  const revRow = document.getElementById('d-row-revenue');
+  const rev = fmtRevenue(c.annual_revenue);
+  if (rev) {
+    document.getElementById('d-revenue').textContent = rev;
+    revRow.style.display = ''; hasAny = true;
+  } else { revRow.style.display = 'none'; }
+
+  section.style.display = hasAny ? 'block' : 'none';
+}
+
 function openDetail(id) {
   currentContact = allContacts.find(c => c.id === id);
   if (!currentContact) return;
@@ -616,6 +682,9 @@ function openDetail(id) {
   document.getElementById('d-status').innerHTML    = statusHTML(c.status);
   document.getElementById('d-action-result').textContent = '';
   document.getElementById('d-save-btn').style.display = 'none';
+
+  // ── Company Details section (from Apollo enrichment) ──
+  fillCompanyDetails(c);
 
   // Follow Up button: only for contacts already emailed but not yet scheduled/closed
   const fBtn = document.getElementById('d-followup-btn');

@@ -184,19 +184,38 @@ class ApolloService:
             .replace("www.", "").split("/")[0].strip()
         ) or None
 
+        # Corporate phone (free) — try person then organization
+        corp_phone = (
+            raw.get("corporate_phone")
+            or org.get("phone")
+            or org.get("primary_phone", {}).get("number") if isinstance(org.get("primary_phone"), dict) else None
+        )
+        # sanitize leading quote Apollo sometimes adds
+        if corp_phone:
+            corp_phone = str(corp_phone).lstrip("'").strip()
+
+        num_emp = org.get("estimated_num_employees")
+        revenue = org.get("annual_revenue") or org.get("organization_revenue")
+
         return {
-            "first_name":   raw.get("first_name"),
-            "last_name":    raw.get("last_name"),
-            "email":        raw.get("email"),
-            "title":        raw.get("title"),
-            "company":      org.get("name"),
-            "industry":     org.get("industry"),
-            "employees":    org.get("estimated_num_employees"),
-            "region":       raw.get("city") or raw.get("state"),
-            "linkedin_url": raw.get("linkedin_url"),
-            "apollo_id":    raw.get("id"),
-            "domain":       domain,
-            "source":       "apollo",
+            "first_name":      raw.get("first_name"),
+            "last_name":       raw.get("last_name"),
+            "email":           raw.get("email"),
+            "title":           raw.get("title"),
+            "company":         org.get("name"),
+            "industry":        org.get("industry"),
+            "employees":       num_emp,
+            "num_employees":   str(num_emp) if num_emp else None,
+            "annual_revenue":  str(revenue) if revenue else None,
+            "region":          raw.get("city") or raw.get("state"),
+            "city":            raw.get("city"),
+            "state":           raw.get("state"),
+            "linkedin_url":    raw.get("linkedin_url"),
+            "phone_corporate": corp_phone,
+            "website":         website or None,
+            "apollo_id":       raw.get("id"),
+            "domain":          domain,
+            "source":          "apollo",
         }
 
 

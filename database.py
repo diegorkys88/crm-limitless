@@ -37,6 +37,14 @@ class Contact(Base):
     apollo_id         = Column(String(100))
     # Marketing consent — from Kajabi's "subscribed" field
     subscribed        = Column(String(10), default="unknown")  # true | false | unknown
+    # Extra enrichment data from Apollo (all free-tier fields)
+    phone_corporate   = Column(String(50))
+    linkedin_url      = Column(String(300))
+    city              = Column(String(120))
+    state             = Column(String(120))
+    website           = Column(String(300))
+    num_employees     = Column(String(20))
+    annual_revenue    = Column(String(30))
 
     created_at        = Column(DateTime, server_default=func.now())
     updated_at        = Column(DateTime, server_default=func.now(), onupdate=func.now())
