@@ -1,4 +1,3 @@
-import json
 import os
 import httpx
 from dotenv import load_dotenv
@@ -106,8 +105,17 @@ class ApolloService:
             raise Exception("Apollo 429: Rate limit on enrichment.")
 
         resp.raise_for_status()
-        person = resp.json().get("person")
-        return self._normalize_person(person) if person else None
+        body   = resp.json()
+        person = body.get("person")
+        if not person:
+            return None
+
+        # The match endpoint returns the org as a separate top-level object
+        # sometimes; merge it into the person so _normalize can read it.
+        if not person.get("organization") and body.get("organization"):
+            person["organization"] = body["organization"]
+
+        return self._normalize_person(person)
 
     # ── Bulk enrich up to 10 people (FREE) ────────────────────────────────────
     def bulk_enrich(self, contacts: list[dict]) -> list[dict]:
@@ -177,43 +185,70 @@ class ApolloService:
         }
 
     # ── Normalize ──────────────────────────────────────────────────────────────
-    
     def _normalize_person(self, raw: dict) -> dict:
-        import json
-        print(f"[Apollo raw] {json.dumps(raw, indent=2)[:2000]}")
+        # Organization can arrive as a nested object, or be missing (only organization_id).
+        # In the latter case, pull company info from the current employment_history entry.
         org = raw.get("organization") or {}
+
+        # Current job from employment history (where current == True)
+        current_job = {}
+        for job in (raw.get("employment_history") or []):
+            if job.get("current"):
+                current_job = job
+                break
+
+        # Company name: org object → current job → account name
+        company = (
+            org.get("name")
+            or current_job.get("organization_name")
+            or raw.get("organization_name")
+        )
+
         website = org.get("website_url") or ""
         domain  = (
             website.replace("https://", "").replace("http://", "")
             .replace("www.", "").split("/")[0].strip()
         ) or None
 
-        # Corporate phone (free) — try person then organization
-        corp_phone = (
-            raw.get("corporate_phone")
-            or org.get("phone")
-            or org.get("primary_phone", {}).get("number") if isinstance(org.get("primary_phone"), dict) else None
-        )
-        # sanitize leading quote Apollo sometimes adds
-        if corp_phone:
-            corp_phone = str(corp_phone).lstrip("'").strip()
+        # Corporate phone (free tier). Apollo puts it in several possible places.
+        corp_phone = None
+        for candidate in [
+            raw.get("corporate_phone"),
+            org.get("phone"),
+            org.get("sanitized_phone"),
+            (org.get("primary_phone") or {}).get("number") if isinstance(org.get("primary_phone"), dict) else None,
+        ]:
+            if candidate:
+                corp_phone = str(candidate).lstrip("'").strip()
+                break
 
         num_emp = org.get("estimated_num_employees")
-        revenue = org.get("annual_revenue") or org.get("organization_revenue")
+        revenue = (
+            org.get("annual_revenue")
+            or org.get("organization_revenue")
+            or org.get("organization_revenue_printed")
+        )
+
+        # Industry: org object, else the raw industry field
+        industry = org.get("industry") or raw.get("industry")
+
+        # City/State can be on the person directly
+        city  = raw.get("city")
+        state = raw.get("state")
 
         return {
             "first_name":      raw.get("first_name"),
             "last_name":       raw.get("last_name"),
             "email":           raw.get("email"),
-            "title":           raw.get("title"),
-            "company":         org.get("name"),
-            "industry":        org.get("industry"),
+            "title":           raw.get("title") or current_job.get("title"),
+            "company":         company,
+            "industry":        industry,
             "employees":       num_emp,
             "num_employees":   str(num_emp) if num_emp else None,
             "annual_revenue":  str(revenue) if revenue else None,
-            "region":          raw.get("city") or raw.get("state"),
-            "city":            raw.get("city"),
-            "state":           raw.get("state"),
+            "region":          city or state,
+            "city":            city,
+            "state":           state,
             "linkedin_url":    raw.get("linkedin_url"),
             "phone_corporate": corp_phone,
             "website":         website or None,
