@@ -1,3 +1,4 @@
+import json
 import os
 import httpx
 from dotenv import load_dotenv
@@ -176,8 +177,11 @@ class ApolloService:
         }
 
     # ── Normalize ──────────────────────────────────────────────────────────────
+    
     def _normalize_person(self, raw: dict) -> dict:
-        org     = raw.get("organization") or {}
+        import json
+        print(f"[Apollo raw] {json.dumps(raw, indent=2)[:2000]}")
+        org = raw.get("organization") or {}
         website = org.get("website_url") or ""
         domain  = (
             website.replace("https://", "").replace("http://", "")
