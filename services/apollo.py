@@ -27,11 +27,15 @@ class ApolloService:
         employees_range: str       = None,
         per_page:        int       = 25,
         page:            int       = 1,
+        verified_only:   bool      = True,
     ) -> tuple[list[dict], dict]:
         """
         Search Apollo for people by title/location/industry.
-        Requires paid plan (Basic $49/mo).
-        Parameters go as URL query strings.
+        Requires paid plan. Parameters go as URL query strings.
+
+        verified_only=True → only return people with a VERIFIED email.
+        This is the key credit-saver: we only enrich people who actually
+        have a revealable email, instead of burning credits on empty matches.
         """
         params = []
         for title in (titles or []):
@@ -44,6 +48,9 @@ class ApolloService:
             params.append(("organization_num_employees_ranges[]", employees_range))
         if keywords:
             params.append(("q_keywords", keywords))
+        # Only people with a verified email — avoids wasting enrich credits
+        if verified_only:
+            params.append(("contact_email_status[]", "verified"))
         params.append(("per_page", str(min(per_page, 100))))
         params.append(("page",     str(page)))
 
@@ -64,7 +71,7 @@ class ApolloService:
         data = resp.json()
         return [self._normalize_person(p) for p in data.get("people", [])], data.get("pagination", {})
 
-    # ── Enrich single person (FREE) ───────────────────────────────────────────
+    # ── Enrich single person ──────────────────────────────────────────────────
     def enrich_person(
         self,
         email:        str = None,
@@ -76,12 +83,10 @@ class ApolloService:
         reveal_email: bool = True,
     ) -> dict | None:
         """
-        Enrich one person to get their full profile.
-        - reveal_email=True  → also reveals the verified email (costs 1 credit).
-          Use for NEW prospects where we don't have an email yet.
-        - reveal_email=False → "economic" mode: only title/company/industry/region.
-          Use for contacts we ALREADY have an email for (Kajabi). Cheap/free.
+        Enrich one person. reveal_email=True reveals verified email (1 credit).
         Best match: apollo_id (exact) > email > linkedin_url > name+domain.
+        Falls back to organization enrichment so company data (phone, revenue,
+        employees) gets filled even when the match omits the org object.
         """
         params = [
             ("reveal_personal_emails", "true" if reveal_email else "false"),
@@ -110,24 +115,30 @@ class ApolloService:
         if not person:
             return None
 
-        # The match endpoint returns the org as a separate top-level object
-        # sometimes; merge it into the person so _normalize can read it.
         if not person.get("organization") and body.get("organization"):
             person["organization"] = body["organization"]
 
-        return self._normalize_person(person)
+        result = self._normalize_person(person)
 
-    # ── Bulk enrich up to 10 people (FREE) ────────────────────────────────────
+        # If company data is still thin, enrich the organization by domain (free)
+        if result.get("domain") and (not result.get("phone_corporate")
+                                     or not result.get("num_employees")
+                                     or not result.get("annual_revenue")):
+            try:
+                org_data = self.enrich_organization(result["domain"])
+                if org_data:
+                    for k in ["phone_corporate","num_employees","annual_revenue",
+                              "website","industry","company"]:
+                        if not result.get(k) and org_data.get(k):
+                            result[k] = org_data[k]
+            except Exception as e:
+                print(f"[Apollo] org fallback failed for {result.get('domain')}: {e}")
+
+        return result
+
+    # ── Bulk enrich up to 10 people ───────────────────────────────────────────
     def bulk_enrich(self, contacts: list[dict]) -> list[dict]:
-        """
-        Enrich up to 10 contacts in one call.
-        FREE on all plans.
-        Each contact dict should have: first_name, last_name, domain (or email).
-        Great for enriching Kajabi/ClickFunnels contacts after import.
-        """
-        # Apollo bulk_match accepts max 10 per call
         batch = contacts[:10]
-
         details = []
         for c in batch:
             detail = {}
@@ -137,7 +148,6 @@ class ApolloService:
             if c.get("domain"):     detail["domain"]     = c["domain"]
             if detail:
                 details.append(detail)
-
         if not details:
             return []
 
@@ -148,37 +158,41 @@ class ApolloService:
                 json    = {"details": details},
                 headers = HEADERS,
             )
-
         if resp.status_code == 429:
             raise Exception("Apollo 429: Rate limit on bulk enrichment.")
-
         resp.raise_for_status()
         matches = resp.json().get("matches", [])
         return [self._normalize_person(m) for m in matches if m]
 
     # ── Enrich organization (FREE) ────────────────────────────────────────────
     def enrich_organization(self, domain: str) -> dict | None:
-        """
-        Get company data from Apollo by domain.
-        FREE — useful to enrich companies from Kajabi contacts.
-        e.g. enrich_organization("forddealer.com")
-        """
+        """Get company data from Apollo by domain. Free."""
         with httpx.Client(timeout=30) as client:
             resp = client.get(
                 f"{APOLLO_BASE}/organizations/enrich",
                 params  = [("domain", domain)],
                 headers = HEADERS,
             )
-
         resp.raise_for_status()
         org = resp.json().get("organization")
         if not org:
             return None
 
+        phone = org.get("phone") or org.get("sanitized_phone")
+        if isinstance(org.get("primary_phone"), dict):
+            phone = phone or org["primary_phone"].get("number")
+        if phone:
+            phone = str(phone).lstrip("'").strip()
+
+        num_emp = org.get("estimated_num_employees")
+        revenue = org.get("annual_revenue") or org.get("organization_revenue")
+
         return {
             "company":          org.get("name"),
             "industry":         org.get("industry"),
-            "employees":        org.get("estimated_num_employees"),
+            "num_employees":    str(num_emp) if num_emp else None,
+            "annual_revenue":   str(revenue) if revenue else None,
+            "phone_corporate":  phone,
             "website":          org.get("website_url"),
             "linkedin_url":     org.get("linkedin_url"),
             "founded_year":     org.get("founded_year"),
@@ -186,18 +200,14 @@ class ApolloService:
 
     # ── Normalize ──────────────────────────────────────────────────────────────
     def _normalize_person(self, raw: dict) -> dict:
-        # Organization can arrive as a nested object, or be missing (only organization_id).
-        # In the latter case, pull company info from the current employment_history entry.
         org = raw.get("organization") or {}
 
-        # Current job from employment history (where current == True)
         current_job = {}
         for job in (raw.get("employment_history") or []):
             if job.get("current"):
                 current_job = job
                 break
 
-        # Company name: org object → current job → account name
         company = (
             org.get("name")
             or current_job.get("organization_name")
@@ -209,8 +219,13 @@ class ApolloService:
             website.replace("https://", "").replace("http://", "")
             .replace("www.", "").split("/")[0].strip()
         ) or None
+        # If no website domain, derive from email
+        if not domain and raw.get("email") and "@" in raw["email"]:
+            maybe = raw["email"].split("@")[1].lower()
+            free = {"gmail.com","yahoo.com","hotmail.com","outlook.com","aol.com","icloud.com"}
+            if maybe not in free:
+                domain = maybe
 
-        # Corporate phone (free tier). Apollo puts it in several possible places.
         corp_phone = None
         for candidate in [
             raw.get("corporate_phone"),
@@ -226,13 +241,9 @@ class ApolloService:
         revenue = (
             org.get("annual_revenue")
             or org.get("organization_revenue")
-            or org.get("organization_revenue_printed")
         )
 
-        # Industry: org object, else the raw industry field
         industry = org.get("industry") or raw.get("industry")
-
-        # City/State can be on the person directly
         city  = raw.get("city")
         state = raw.get("state")
 

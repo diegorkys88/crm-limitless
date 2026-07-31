@@ -78,10 +78,10 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
     ) -> dict:
         """
         Full prospecting flow:
-        1. Search Apollo FREE — names, titles, companies (no credits)
+        1. Search Apollo — only VERIFIED-email people (saves credits)
         2. Claude filters the best candidates
-        3. If enrich=True: get emails via enrichment (1 credit each)
-        4. Save approved contacts to DB
+        3. If enrich=True: get emails + full company data (1 credit each)
+        4. Save approved contacts to DB with all enrichment fields
         """
         from services.apollo import apollo_service
         from database import Contact, SyncLog
@@ -96,31 +96,30 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
             "summary":  ""
         }
 
-        # ── Step 1: Search Apollo (FREE) ──────────────────────────────────────
+        # ── Step 1: Search Apollo (verified emails only) ──────────────────────
         print(f"[Prospector] Searching Apollo — region: {region}, limit: {limit}")
         try:
             raw_contacts, pagination = apollo_service.search_people(
-                titles    = titles,
-                locations = [region],
-                keywords  = industry,
-                per_page  = min(limit, 100),
+                titles        = titles,
+                locations     = [region],
+                keywords      = industry,
+                per_page      = min(limit, 100),
+                verified_only = True,   # only people with a verified email
             )
             stats["found"] = len(raw_contacts)
-            print(f"[Prospector] Apollo returned {len(raw_contacts)} contacts (no credits used)")
+            print(f"[Prospector] Apollo returned {len(raw_contacts)} verified contacts")
         except Exception as e:
             print(f"[Prospector] Apollo search error: {e}")
             return {**stats, "error": str(e)}
 
         if not raw_contacts:
-            stats["summary"] = "No contacts found — try different titles or region"
+            stats["summary"] = "No contacts with verified email found — try different titles or region"
             return stats
 
         # ── Step 2: Claude filters the best ones ──────────────────────────────
         if enrich:
-            # Only filter when we're going to spend credits
             approved = self.filter_contacts(raw_contacts, db)
         else:
-            # Preview mode — return all without filtering or saving
             approved = raw_contacts
             stats["approved"] = len(approved)
             stats["summary"]  = f"Preview mode (enrich=false): found {len(approved)} contacts. Set enrich=true to get emails and save to DB."
@@ -132,7 +131,7 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
             stats["summary"] = "Claude filtered out all contacts — try different search criteria"
             return stats
 
-        # ── Step 3: Enrich to get emails (costs 1 credit per person) ──────────
+        # ── Step 3: Enrich to get emails + company data ───────────────────────
         imported = 0
         skipped  = 0
         skip_reasons = []
@@ -149,7 +148,7 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
                     skip_reasons.append(f"{person_name}: already in DB (apollo_id)")
                     continue
 
-            # Enrich to get email
+            # Enrich to get email + full company data
             email = None
             try:
                 enriched = apollo_service.enrich_person(
@@ -161,7 +160,6 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
                 )
                 if enriched:
                     email = enriched.get("email")
-                    # Update contact_data with enriched info
                     contact_data.update({k: v for k, v in enriched.items() if v})
                 stats["enriched"] += 1
             except Exception as e:
@@ -173,7 +171,7 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
                 skip_reasons.append(f"{person_name}: Apollo has no verified email")
                 continue
 
-            # Skip garbage data from Apollo (undefined names create fake emails)
+            # Skip garbage data
             last = (contact_data.get("last_name") or "").lower()
             if last in ("undefined", "none", "null", "unknown") or "undefined" in email.lower():
                 skipped += 1
@@ -187,19 +185,27 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
                 skip_reasons.append(f"{person_name}: email already in DB ({email})")
                 continue
 
-            # Save to DB
+            # Save to DB — WITH all enrichment fields
             contact = Contact(
-                id         = str(uuid.uuid4()),
-                first_name = contact_data.get("first_name"),
-                last_name  = contact_data.get("last_name"),
-                email      = email,
-                title      = contact_data.get("title"),
-                company    = contact_data.get("company"),
-                industry   = contact_data.get("industry") or industry,
-                region     = contact_data.get("region") or region,
-                source     = "apollo",
-                apollo_id  = apollo_id,
-                status     = "pending",
+                id              = str(uuid.uuid4()),
+                first_name      = contact_data.get("first_name"),
+                last_name       = contact_data.get("last_name"),
+                email           = email,
+                title           = contact_data.get("title"),
+                company         = contact_data.get("company"),
+                industry        = contact_data.get("industry") or industry,
+                region          = contact_data.get("region") or region,
+                source          = "apollo",
+                apollo_id       = apollo_id,
+                status          = "pending",
+                # Enrichment extras
+                phone_corporate = contact_data.get("phone_corporate"),
+                linkedin_url    = contact_data.get("linkedin_url"),
+                city            = contact_data.get("city"),
+                state           = contact_data.get("state"),
+                website         = contact_data.get("website"),
+                num_employees   = contact_data.get("num_employees"),
+                annual_revenue  = contact_data.get("annual_revenue"),
             )
             db.add(contact)
 
@@ -215,7 +221,7 @@ Remember: we pay per enrichment — only approve the most relevant profiles.
 
         db.commit()
 
-        # Auto-classify newly imported contacts (they have title+industry from Apollo)
+        # Auto-classify newly imported contacts
         if imported > 0:
             try:
                 from agents.classifier import classifier_agent
