@@ -12,7 +12,8 @@ from datetime import datetime
 
 router = APIRouter()
 
-CALENDLY_BASE = os.getenv("CALENDLY_BASE_URL", "https://calendly.com/your-link")
+CALENDLY_BASE   = os.getenv("CALENDLY_BASE_URL", "https://calendly.com/your-link")
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Limitless Leadership")
 
 
 def _build_calendly_link(contact_id: str) -> str:
@@ -44,14 +45,11 @@ def generate_outreach(contact_id: str, db: Session = Depends(get_db)):
     if contact.status == "outreach_sent":
         raise HTTPException(status_code=409, detail="Contact already received outreach")
 
-    # Step 1 — Classify
     score_result = classifier_agent.classify(contact, db)
 
-    # Step 2 — Generate email
     calendly_link = _build_calendly_link(contact_id)
     email_result  = copywriter_agent.write_email(contact, calendly_link, db)
 
-    # Step 3 — Save as draft
     outreach = Outreach(
         id            = str(uuid.uuid4()),
         contact_id    = contact_id,
@@ -78,11 +76,11 @@ def generate_outreach(contact_id: str, db: Session = Depends(get_db)):
 @router.post("/{outreach_id}/send")
 def send_outreach(
     outreach_id:  str,
-    sender_name:  str = Query(None, description="Sales rep name to replace [Your Name]"),
+    sender_name:  str = Query(None, description="Sender name override (defaults to company brand)"),
     db: Session = Depends(get_db)
 ):
     """
-    Send a draft email via SendGrid.
+    Send a draft email via Brevo.
     Marks contact as outreach_sent and logs the sync.
     """
     outreach = db.query(Outreach).filter(Outreach.id == outreach_id).first()
@@ -95,12 +93,10 @@ def send_outreach(
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
 
-    # Get sender name — from query param or first user in DB
+    # Sender name always defaults to the company brand, not a user's name
     if not sender_name:
-        user = db.query(User).first()
-        sender_name = user.name if user else EMAIL_FROM_NAME
+        sender_name = EMAIL_FROM_NAME
 
-    # Send via SendGrid
     result = email_service.send(
         to_email    = contact.email,
         to_name     = f"{contact.first_name or ''} {contact.last_name or ''}".strip(),
@@ -112,28 +108,23 @@ def send_outreach(
     if not result.get("success"):
         raise HTTPException(
             status_code = 502,
-            detail      = f"SendGrid error: {result.get('error')}"
+            detail      = f"Email error: {result.get('error')}"
         )
 
-    # Update outreach status
     outreach.status  = "sent"
     outreach.sent_at = datetime.utcnow()
+    contact.status   = "outreach_sent"
 
-    # Update contact status
-    contact.status = "outreach_sent"
-
-    # Log the sync
     db.add(SyncLog(
         id         = str(uuid.uuid4()),
         contact_id = contact.id,
-        platform   = "sendgrid",
+        platform   = "brevo",
         action     = "email_sent",
         tag        = "outreach",
         status     = "success",
     ))
     db.commit()
 
-    # Add crm-contacted tag in Kajabi if contact has kajabi_id
     if contact.kajabi_id:
         try:
             from services.kajabi import kajabi_service
@@ -148,7 +139,7 @@ def send_outreach(
             print(f"[Kajabi tag] crm-contacted error: {e}")
 
     return {
-        "status":     "sent",
+        "status":      "sent",
         "outreach_id": outreach_id,
         "to":          contact.email,
         "subject":     outreach.subject,
@@ -159,16 +150,16 @@ def send_outreach(
 @router.post("/batch/generate-and-send")
 def batch_generate_and_send(
     score_filter: str = Query("hot", description="hot | warm | cold | all"),
-    sender_name:  str = Query(None,  description="Sales rep name"),
+    sender_name:  str = Query(None,  description="Sender name (defaults to company brand)"),
     limit:        int = Query(10,    ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     """
-    Batch operation:
-    1. Find pending contacts by score
-    2. Generate + send outreach for each one
-    Great for launching a campaign from Kajabi contacts.
+    Batch: find pending contacts by score, generate + send outreach for each.
     """
+    if not sender_name:
+        sender_name = EMAIL_FROM_NAME
+
     q = db.query(Contact).filter(Contact.status == "pending")
     if score_filter != "all":
         q = q.filter(Contact.score == score_filter)
@@ -180,7 +171,6 @@ def batch_generate_and_send(
     results = []
     for contact in contacts:
         try:
-            # Generate
             calendly_link = _build_calendly_link(contact.id)
             classifier_agent.classify(contact, db)
             email_result  = copywriter_agent.write_email(contact, calendly_link, db)
@@ -197,7 +187,6 @@ def batch_generate_and_send(
             db.add(outreach)
             db.commit()
 
-            # Send
             send_result = email_service.send(
                 to_email    = contact.email,
                 to_name     = f"{contact.first_name or ''} {contact.last_name or ''}".strip(),
@@ -279,25 +268,18 @@ def batch_generate_followups(
     db: Session = Depends(get_db)
 ):
     """
-    Generate follow-up DRAFTS (not sent) for all contacts that:
-      - were contacted (status = outreach_sent)
-      - have NOT scheduled a meeting
-      - whose last sent email was >= days_since_min days ago
-      - haven't already gotten a follow-up draft waiting
-
-    Admin reviews the drafts in Outreach and sends them manually.
-    Returns how many drafts were created.
+    Generate follow-up DRAFTS (not sent) for contacts contacted but not scheduled,
+    whose last email was >= days_since_min days ago. Admin reviews then sends.
     """
     from agents.followup import followup_agent
     from datetime import timedelta
 
     cutoff = datetime.utcnow() - timedelta(days=days_since_min)
 
-    # Contacts still at outreach_sent (not scheduled/won/lost)
     candidates = (
         db.query(Contact)
         .filter(Contact.status == "outreach_sent")
-        .limit(limit * 3)  # over-fetch, we filter below
+        .limit(limit * 3)
         .all()
     )
 
@@ -309,7 +291,6 @@ def batch_generate_followups(
         if created >= limit:
             break
 
-        # Last sent email
         last_sent = (
             db.query(Outreach)
             .filter(Outreach.contact_id == contact.id, Outreach.status == "sent")
@@ -320,7 +301,6 @@ def batch_generate_followups(
             skipped += 1
             continue
 
-        # Skip if there's already a draft waiting (avoid piling up)
         existing_draft = (
             db.query(Outreach)
             .filter(Outreach.contact_id == contact.id, Outreach.status == "draft")
@@ -330,13 +310,12 @@ def batch_generate_followups(
             skipped += 1
             continue
 
-        # Count previous follow-ups — cap at 2
         followup_count = (
             db.query(Outreach)
             .filter(Outreach.contact_id == contact.id, Outreach.status == "sent")
             .count()
         )
-        if followup_count >= 3:  # original + 2 follow-ups already
+        if followup_count >= 3:
             skipped += 1
             continue
 
@@ -367,10 +346,6 @@ def batch_generate_followups(
         "details":        details,
         "message":        f"{created} follow-up drafts created. Review and send them in the Outreach tab.",
     }
-
-
-# needed for sender name fallback
-EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Your Company")
 
 
 @router.delete("/{outreach_id}", status_code=204)

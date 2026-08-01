@@ -513,7 +513,7 @@ async function sendFromModal() {
       body: JSON.stringify({subject, body})
     });
 
-    const r = await fetch(`${API}/outreach/${currentOutreachId}/send?sender_name=Diego`, {
+    const r = await fetch(`${API}/outreach/${currentOutreachId}/send`, {
       method: 'POST', headers: authHeaders()
     });
     const d = await r.json();
@@ -816,7 +816,7 @@ async function sendGeneratedOutreach(outreachId) {
   res.style.color = 'var(--muted)';
   res.textContent = 'Sending...';
 
-  const r = await fetch(`${API}/outreach/${outreachId}/send?sender_name=Diego`, {method:'POST', headers:authHeaders()});
+  const r = await fetch(`${API}/outreach/${outreachId}/send`, {method:'POST', headers:authHeaders()});
   const d = await r.json();
   if (r.ok) {
     res.style.color = 'var(--green)';
@@ -831,7 +831,7 @@ async function sendGeneratedOutreach(outreachId) {
 }
 
 async function sendOutreach(outreachId) {
-  const r = await fetch(`${API}/outreach/${outreachId}/send?sender_name=Diego`, {method:'POST', headers:authHeaders()});
+  const r = await fetch(`${API}/outreach/${outreachId}/send`, {method:'POST', headers:authHeaders()});
   const d = await r.json();
   if (r.ok) { showNotif('Email Sent!', `Delivered successfully`); await loadData(); renderOutreachTable(); }
 }
