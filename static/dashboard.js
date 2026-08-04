@@ -690,6 +690,10 @@ function openDetail(id) {
   const fBtn = document.getElementById('d-followup-btn');
   if (fBtn) fBtn.style.display = (c.status === 'outreach_sent') ? 'inline-flex' : 'none';
 
+  // No Show button: only for contacts with a scheduled meeting
+  const nsBtn = document.getElementById('d-noshow-btn');
+  if (nsBtn) nsBtn.style.display = (c.status === 'appointment_scheduled') ? 'inline-flex' : 'none';
+
   // Check for AI summary
   const appt = allAppointments.find(a => a.contact_id === id && a.ai_summary);
   if (appt) {
@@ -1285,6 +1289,65 @@ async function deleteContact() {
 }
 
 // ── CLOSE CONTACT ────────────────────────────────────────────────────────────
+async function runRemindOverdue() {
+  const res = document.getElementById('remind-overdue-result');
+  if (!confirm('Send reminder emails to reps for meetings that already passed but haven\'t been closed out?')) return;
+
+  res.style.color = 'var(--muted)';
+  res.style.padding = '10px 20px';
+  res.textContent = 'Checking for overdue meetings...';
+
+  try {
+    const r = await fetch(`${API}/appointments/remind-overdue?grace_hours=2`, {
+      method: 'POST', headers: authHeaders()
+    });
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ ${d.overdue_found} overdue found, ${d.reminded} reminder(s) sent to reps.`;
+      if (d.reminded > 0) showNotif('Reminders sent', `${d.reminded} rep(s) notified about pending meetings`);
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not check overdue meetings';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  }
+}
+
+async function markNoShow() {
+  if (!currentContact) return;
+  const name = `${currentContact.first_name || ''} ${currentContact.last_name || ''}`.trim() || currentContact.email;
+  if (!confirm(`Mark ${name} as No Show?\n\nThe meeting will be marked as no-show and the contact moves back so you can send a follow-up to reschedule.`)) return;
+
+  const res = document.getElementById('d-action-result');
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Marking as no-show...';
+
+  try {
+    const r = await fetch(`${API}/appointments/${currentContact.id}/no-show`, {
+      method: 'POST', headers: authHeaders()
+    });
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = '✓ Marked as no-show. Use "Follow Up" to send a reschedule email.';
+      showNotif('No Show', `${name} marked as no-show`);
+      await loadData();
+      // Refresh the open panel
+      currentContact = allContacts.find(c => c.id === currentContact.id);
+      if (currentContact) openDetail(currentContact.id);
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not mark no-show';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  }
+}
+
 async function closeContact(result) {
   if (!currentContact) return;
   const label = result === 'won' ? 'Close Won' : 'Close Lost';

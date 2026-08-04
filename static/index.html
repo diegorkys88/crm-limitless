@@ -295,7 +295,9 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">APPOINTMENTS</div>
+          <button class="btn btn-ghost" onclick="runRemindOverdue()" style="padding:5px 12px;font-size:11px" title="Email reps about meetings that already passed but aren't closed out">⏰ Remind Overdue</button>
         </div>
+        <div id="remind-overdue-result" style="padding:0 20px;font-size:12px;color:var(--muted);font-family:var(--font-mono)"></div>
         <table>
           <thead>
             <tr>
@@ -541,6 +543,7 @@
       <div class="detail-actions" style="margin-top:8px">
         <button class="btn btn-ghost" onclick="closeContact('won')" style="color:var(--green);border-color:rgba(46,204,113,0.5)">✓ Close Won</button>
         <button class="btn btn-ghost" onclick="closeContact('lost')" style="color:var(--hot);border-color:rgba(255,77,46,0.5)">✗ Close Lost</button>
+        <button class="btn btn-ghost" id="d-noshow-btn" onclick="markNoShow()" style="color:#e8a13a;border-color:rgba(232,161,58,0.5);display:none">⊘ No Show</button>
         <button class="btn btn-ghost" onclick="deleteContact()" style="color:var(--hot);border-color:transparent;margin-left:auto" title="Delete contact permanently">🗑</button>
       </div>
 
