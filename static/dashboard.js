@@ -1089,13 +1089,15 @@ function showApp() {
     if (oldBadge) oldBadge.remove();
 
     // Show role badge
+  // Show role badge
     const roleEl = document.createElement('span');
     roleEl.className = `role-badge role-${currentUserData.role}`;
-    roleEl.textContent = currentUserData.role === 'admin' ? 'ADMIN' : 'SALES';
+    roleEl.textContent = currentUserData.role === 'super_admin' ? 'SUPER ADMIN' : 'ADMIN';
     document.getElementById('user-name').after(roleEl);
 
-    // Show admin nav, hide sync for sales reps
-    if (currentUserData.role === 'admin') {
+    // Both admin and super_admin get full access
+    const isAdmin = currentUserData.role === 'admin' || currentUserData.role === 'super_admin';
+    if (isAdmin) {
       document.getElementById('nav-section-admin').style.display = 'block';
       document.getElementById('nav-settings').style.display      = 'flex';
     } else {
@@ -1220,7 +1222,7 @@ async function loadUsers() {
         <div style="font-size:13px;font-weight:500;color:var(--white)">${u.name}</div>
         <div style="font-size:11px;color:var(--muted)">${u.email}</div>
       </div>
-      <span class="role-badge role-${u.role}">${u.role === 'admin' ? 'ADMIN' : 'SALES'}</span>
+     <span class="role-badge role-${u.role}">${u.role === 'super_admin' ? 'SUPER ADMIN' : 'ADMIN'}</span>
       ${u.is_active === 'false'
         ? '<span style="font-size:10px;color:var(--hot);font-family:var(--font-mono)">INACTIVE</span>'
         : `<button class="action-btn" onclick="deactivateUser('${u.id}','${u.name}')">Deactivate</button>`
