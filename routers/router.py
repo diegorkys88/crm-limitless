@@ -13,10 +13,10 @@ router = APIRouter()
 from collections import defaultdict
 from time import time as _now
 
-_FAILED = defaultdict(list)      # key (ip|email) -> [timestamps of failures]
-_MAX_FAILS   = 5                 # allowed failures
-_LOCK_WINDOW = 15 * 60           # within 15 minutes → lock
-_LOCK_TIME   = 15 * 60           # lock duration (seconds)
+_FAILED = defaultdict(list)
+_MAX_FAILS   = 5
+_LOCK_WINDOW = 15 * 60
+_LOCK_TIME   = 15 * 60
 
 
 def _login_key(ip: str, email: str) -> str:
@@ -24,12 +24,10 @@ def _login_key(ip: str, email: str) -> str:
 
 
 def _is_locked(key: str) -> int:
-    """Return seconds remaining if locked, else 0."""
     now = _now()
     fails = [t for t in _FAILED[key] if now - t < _LOCK_WINDOW]
     _FAILED[key] = fails
     if len(fails) >= _MAX_FAILS:
-        # locked until the oldest relevant failure ages out
         unlock_at = fails[0] + _LOCK_TIME
         remaining = int(unlock_at - now)
         return max(remaining, 0)
@@ -44,6 +42,12 @@ def _clear_fails(key: str):
     _FAILED.pop(key, None)
 
 
+# ── Roles ──────────────────────────────────────────────────────────────────────
+# super_admin → the single owner account; everything auto-assigns to them.
+# admin       → regular users who operate the CRM.
+VALID_ROLES = ["super_admin", "admin"]
+
+
 # ── Schemas ────────────────────────────────────────────────────────────────────
 class LoginRequest(BaseModel):
     email:    EmailStr
@@ -53,7 +57,7 @@ class RegisterRequest(BaseModel):
     name:     str
     email:    EmailStr
     password: str
-    role:     str = "sales_rep"  # admin | sales_rep
+    role:     str = "admin"
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
@@ -73,12 +77,9 @@ class UserOut(BaseModel):
 @router.post("/login")
 def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """
-    Login with email and password.
-    Returns a JWT token valid for 24 hours.
-    Protected against brute-force: after 5 failed attempts from the same
-    IP+email within 15 minutes, further attempts are locked for 15 minutes.
+    Login with email and password. JWT valid 24h.
+    Brute-force protected: 5 failed attempts per IP+email in 15 min → 15 min lock.
     """
-    # Resolve client IP (respect Railway's proxy header)
     client_ip = request.client.host if request.client else "unknown"
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
@@ -86,7 +87,6 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
     key = _login_key(client_ip, data.email)
 
-    # Check lock
     locked_for = _is_locked(key)
     if locked_for > 0:
         minutes = (locked_for // 60) + 1
@@ -107,7 +107,6 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if user.is_active == "false":
         raise HTTPException(status_code=403, detail="Account is inactive")
 
-    # Success — clear any failed attempts for this key
     _clear_fails(key)
 
     token = create_token(user.id, user.role)
@@ -133,13 +132,23 @@ def register(
 ):
     """
     Create a new user. Only admins can do this.
+    Roles: super_admin (only ONE allowed) | admin.
     """
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    if data.role not in ["admin", "sales_rep"]:
-        raise HTTPException(status_code=400, detail="Role must be admin or sales_rep")
+    if data.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Role must be super_admin or admin")
+
+    # Only ONE super_admin may exist
+    if data.role == "super_admin":
+        existing_super = db.query(User).filter(User.role == "super_admin").first()
+        if existing_super:
+            raise HTTPException(
+                status_code=409,
+                detail="A super admin already exists. Only one is allowed."
+            )
 
     user = User(
         id              = str(uuid.uuid4()),
@@ -159,8 +168,8 @@ def register(
 @router.post("/setup")
 def setup_admin(data: RegisterRequest, db: Session = Depends(get_db)):
     """
-    Create the first admin account.
-    Only works if no users exist in the system.
+    Create the first account. Only works if no users exist.
+    The first account is created as super_admin (the owner).
     """
     count = db.query(User).count()
     if count > 0:
@@ -174,7 +183,7 @@ def setup_admin(data: RegisterRequest, db: Session = Depends(get_db)):
         name            = data.name,
         email           = data.email,
         hashed_password = hash_password(data.password),
-        role            = "admin",
+        role            = "super_admin",
         is_active       = "true",
     )
     db.add(user)
@@ -184,7 +193,7 @@ def setup_admin(data: RegisterRequest, db: Session = Depends(get_db)):
     token = create_token(user.id, user.role)
 
     return {
-        "message":      "Admin account created successfully",
+        "message":      "Super admin account created successfully",
         "access_token": token,
         "token_type":   "bearer",
         "user": {
@@ -199,7 +208,6 @@ def setup_admin(data: RegisterRequest, db: Session = Depends(get_db)):
 # ── Profile ────────────────────────────────────────────────────────────────────
 @router.get("/me", response_model=UserOut)
 def get_profile(current_user: User = Depends(get_current_user)):
-    """Get the current user's profile"""
     return current_user
 
 
@@ -209,7 +217,6 @@ def change_password(
     db:           Session = Depends(get_db),
     current_user: User    = Depends(get_current_user)
 ):
-    """Change your own password"""
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
@@ -236,6 +243,9 @@ def deactivate_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Protect the super_admin from being deactivated
+    if user.role == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot deactivate the super admin")
     user.is_active = "false"
     db.commit()
     return {"status": "deactivated"}

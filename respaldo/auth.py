@@ -20,11 +20,6 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 bearer      = HTTPBearer()
 
-# Roles that have full admin privileges.
-# super_admin = the single owner account (also receives auto-assignments).
-# admin       = regular operators.
-ADMIN_ROLES = ("admin", "super_admin")
-
 
 # ── Password ───────────────────────────────────────────────────────────────────
 def hash_password(password: str) -> str:
@@ -68,20 +63,11 @@ def get_current_user(
     return user
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Admin-level access. Both 'admin' and 'super_admin' qualify."""
-    if current_user.role not in ADMIN_ROLES:
+    """Only admins can access this endpoint"""
+    if current_user.role != "admin":
         raise HTTPException(
             status_code = status.HTTP_403_FORBIDDEN,
             detail      = "Admin access required"
-        )
-    return current_user
-
-def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Strictly the super admin (owner) — for owner-only actions if ever needed."""
-    if current_user.role != "super_admin":
-        raise HTTPException(
-            status_code = status.HTTP_403_FORBIDDEN,
-            detail      = "Super admin access required"
         )
     return current_user
 

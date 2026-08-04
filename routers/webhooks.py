@@ -115,7 +115,7 @@ async def _handle_booking(data: dict, background_tasks, db: Session):
 
     # Assign to first active sales rep, fallback to any user
     assigned_user = db.query(User).filter(
-        User.role == "sales_rep", User.is_active == "true"
+        User.role == "super_admin", User.is_active == "true"
     ).first()
     if not assigned_user:
         assigned_user = db.query(User).first()
