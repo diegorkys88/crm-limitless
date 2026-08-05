@@ -167,3 +167,57 @@ def mark_no_show(contact_id: str, db: Session = Depends(get_db)):
         "contact_id": contact_id,
         "message":    "Marked as no-show. You can now generate a follow-up to reschedule.",
     }
+
+
+@router.delete("/all/clear")
+def clear_all_appointments(
+    reset_contacts: bool = Query(True, description="Also reset affected contacts back to outreach_sent"),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete ALL appointments (test-data cleanup).
+    If reset_contacts=True, any contact left in 'appointment_scheduled' is moved
+    back to 'outreach_sent' so the pipeline stays consistent.
+    """
+    appts = db.query(Appointment).all()
+    count = len(appts)
+
+    affected_contacts = set()
+    for appt in appts:
+        if appt.contact_id:
+            affected_contacts.add(appt.contact_id)
+        db.delete(appt)
+
+    reset_count = 0
+    if reset_contacts:
+        for cid in affected_contacts:
+            contact = db.query(Contact).filter(Contact.id == cid).first()
+            if contact and contact.status == "appointment_scheduled":
+                contact.status = "outreach_sent"
+                reset_count += 1
+
+    db.commit()
+
+    return {
+        "status":            "cleared",
+        "appointments_deleted": count,
+        "contacts_reset":    reset_count,
+        "message":           f"Deleted {count} appointment(s), reset {reset_count} contact(s).",
+    }
+
+
+@router.delete("/{appt_id}", status_code=204)
+def delete_appointment(appt_id: str, db: Session = Depends(get_db)):
+    """Delete a single appointment by ID."""
+    appt = db.query(Appointment).filter(Appointment.id == appt_id).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    # Reset the contact if it was scheduled
+    if appt.contact_id:
+        contact = db.query(Contact).filter(Contact.id == appt.contact_id).first()
+        if contact and contact.status == "appointment_scheduled":
+            contact.status = "outreach_sent"
+
+    db.delete(appt)
+    db.commit()

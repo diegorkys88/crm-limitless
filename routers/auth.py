@@ -249,3 +249,40 @@ def deactivate_user(
     user.is_active = "false"
     db.commit()
     return {"status": "deactivated"}
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(
+    user_id:      str,
+    db:           Session = Depends(get_db),
+    current_user: User    = Depends(require_admin)
+):
+    """
+    Permanently delete a user.
+    Protections:
+      - Cannot delete the super_admin (the owner account)
+      - Cannot delete yourself
+      - Any appointments assigned to them are reassigned to the super_admin
+        (or left unassigned if no super_admin exists)
+    """
+    from database import Appointment
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.role == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot delete the super admin")
+
+    if user.id == current_user.id:
+        raise HTTPException(status_code=403, detail="You cannot delete your own account")
+
+    # Reassign this user's appointments to the super_admin (fallback: unassigned)
+    super_admin = db.query(User).filter(User.role == "super_admin").first()
+    reassign_to = super_admin.id if super_admin else None
+    db.query(Appointment).filter(
+        Appointment.assigned_to_id == user_id
+    ).update({Appointment.assigned_to_id: reassign_to})
+
+    db.delete(user)
+    db.commit()

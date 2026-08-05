@@ -1227,6 +1227,10 @@ async function loadUsers() {
         ? '<span style="font-size:10px;color:var(--hot);font-family:var(--font-mono)">INACTIVE</span>'
         : `<button class="action-btn" onclick="deactivateUser('${u.id}','${u.name}')">Deactivate</button>`
       }
+       ${u.role !== 'super_admin'
+        ? `<button class="action-btn" onclick="deleteUser('${u.id}','${u.name}')" style="color:var(--hot);border-color:transparent" title="Delete permanently">🗑</button>`
+        : ''
+      }
     </div>`).join('');
 }
 
@@ -1234,6 +1238,18 @@ async function deactivateUser(userId, userName) {
   if (!confirm(`Deactivate ${userName}? They will no longer be able to log in.`)) return;
   const r = await fetch(`${API}/auth/users/${userId}/deactivate`, {method:'PATCH', headers:authHeaders()});
   if (r.ok) { showNotif('User deactivated', `${userName} can no longer log in`); loadUsers(); }
+}
+
+async function deleteUser(userId, userName) {
+  if (!confirm(`Delete ${userName} permanently?\n\nThis cannot be undone. Their appointments will be reassigned to the super admin.`)) return;
+  const r = await fetch(`${API}/auth/users/${userId}`, {method:'DELETE', headers:authHeaders()});
+  if (r.ok || r.status === 204) {
+    showNotif('User deleted', `${userName} removed permanently`);
+    loadUsers();
+  } else {
+    const d = await r.json().catch(() => ({}));
+    showNotif('Error', d.detail || 'Could not delete user');
+  }
 }
 
 async function changePassword() {
@@ -1311,6 +1327,31 @@ async function runRemindOverdue() {
     } else {
       res.style.color = 'var(--hot)';
       res.textContent = d.detail || 'Could not check overdue meetings';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  }
+}
+
+async function clearAllAppointments() {
+  if (!confirm('Delete ALL appointments?\n\nThis is for test-data cleanup. Contacts in "Meeting Set" will move back to "Contacted". This cannot be undone.')) return;
+  const res = document.getElementById('remind-overdue-result');
+  res.style.color = 'var(--muted)';
+  res.style.padding = '10px 20px';
+  res.textContent = 'Clearing all appointments...';
+  try {
+    const r = await fetch(`${API}/appointments/all/clear?reset_contacts=true`, {method:'DELETE', headers:authHeaders()});
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ Deleted ${d.appointments_deleted} appointment(s), reset ${d.contacts_reset} contact(s).`;
+      showNotif('Appointments cleared', `${d.appointments_deleted} deleted`);
+      await loadData();
+      renderAppointmentsTable();
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not clear appointments';
     }
   } catch (e) {
     res.style.color = 'var(--hot)';
