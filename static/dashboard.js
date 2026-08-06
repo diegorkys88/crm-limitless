@@ -50,7 +50,7 @@ function updateStats() {
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
 function showPage(page) {
-  ['dashboard','contacts','outreach','appointments','sync','settings'].forEach(p => {
+  ['dashboard','contacts','outreach','appointments','campaigns','sync','settings'].forEach(p => {
     document.getElementById(`page-${p}`).style.display = 'none';
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   });
@@ -63,6 +63,7 @@ function showPage(page) {
   if (page === 'contacts')     { currentContactPage = 1; renderContactsTable(allContacts, true); }
   if (page === 'outreach')     renderOutreachTable();
   if (page === 'appointments') renderAppointmentsTable();
+  if (page === 'campaigns')    loadCampaigns();
   if (page === 'settings')     loadUsers();
 }
 
@@ -1515,4 +1516,186 @@ document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     if (window.innerWidth <= 768) closeSidebar();
   });
+});
+
+// ── CAMPAIGNS ─────────────────────────────────────────────────────────────────
+let campaignEmailReady = false;
+
+async function updateCampaignCount() {
+  const region = document.getElementById('camp-region').value.trim() || 'all';
+  const source = document.getElementById('camp-source').value;
+  const score  = document.getElementById('camp-score').value;
+  const status = document.getElementById('camp-status').value;
+  const el = document.getElementById('camp-count');
+  try {
+    const r = await fetch(`${API}/campaigns/preview-count?region=${encodeURIComponent(region)}&source=${source}&score=${score}&status=${status}`, {headers:authHeaders()});
+    const d = await r.json();
+    const n = d.count || 0;
+    let msg = `${n} recipients match these filters`;
+    if (n > 270) msg += ` — will send 270 today, ${n - 270} tomorrow`;
+    el.textContent = msg;
+    el.style.color = n > 0 ? 'var(--green)' : 'var(--muted)';
+  } catch (e) {
+    el.textContent = '— recipients';
+  }
+}
+
+async function generateCampaign() {
+  const prompt = document.getElementById('camp-prompt').value.trim();
+  const btn = document.getElementById('camp-generate-btn');
+  const res = document.getElementById('camp-gen-result');
+
+  if (!prompt) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Describe what the email is about first.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Writing with AI...';
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Claude is drafting the email...';
+
+  try {
+    const r = await fetch(`${API}/campaigns/generate`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({prompt})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      document.getElementById('camp-subject').value = d.subject || '';
+      document.getElementById('camp-body').value    = d.body || '';
+      res.style.color = 'var(--green)';
+      res.textContent = '✓ Email drafted. Review and edit it on the right, then create the campaign.';
+      campaignEmailReady = true;
+      document.getElementById('camp-create-btn').disabled = false;
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not generate email';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Email with AI';
+  }
+}
+
+async function createCampaign() {
+  const name    = document.getElementById('camp-name').value.trim();
+  const subject = document.getElementById('camp-subject').value.trim();
+  const body    = document.getElementById('camp-body').value.trim();
+  const prompt  = document.getElementById('camp-prompt').value.trim();
+  const region  = document.getElementById('camp-region').value.trim() || 'all';
+  const source  = document.getElementById('camp-source').value;
+  const score   = document.getElementById('camp-score').value;
+  const status  = document.getElementById('camp-status').value;
+  const btn = document.getElementById('camp-create-btn');
+  const res = document.getElementById('camp-create-result');
+
+  if (!name)    { res.style.color='var(--hot)'; res.textContent='Campaign name is required'; return; }
+  if (!subject || !body) { res.style.color='var(--hot)'; res.textContent='Generate the email first'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating...';
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Building recipient list...';
+
+  try {
+    const r = await fetch(`${API}/campaigns/create`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({name, subject, body, prompt, region, source, score, status})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ Campaign created with ${d.total_recipients} recipients. Send it from the list below.`;
+      showNotif('Campaign created', `${d.total_recipients} recipients ready`);
+      // Reset form
+      document.getElementById('camp-name').value = '';
+      document.getElementById('camp-prompt').value = '';
+      document.getElementById('camp-subject').value = '';
+      document.getElementById('camp-body').value = '';
+      document.getElementById('camp-create-btn').disabled = true;
+      loadCampaigns();
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not create campaign';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Campaign & Prepare Send';
+  }
+}
+
+async function loadCampaigns() {
+  const tbody = document.getElementById('campaigns-body');
+  try {
+    const r = await fetch(`${API}/campaigns/`, {headers:authHeaders()});
+    const campaigns = await r.json();
+    if (!campaigns.length) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No campaigns yet</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = campaigns.map(c => {
+      const pct = c.total_recipients ? Math.round((c.sent_count / c.total_recipients) * 100) : 0;
+      const remaining = c.total_recipients - c.sent_count;
+      const canSend = c.status === 'draft' || c.status === 'partial';
+      return `<tr class="fade-in">
+        <td><div class="contact-name">${c.name}</div>
+          <div class="contact-company" style="font-size:11px">${new Date(c.created_at).toLocaleDateString()}</div></td>
+        <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.subject || '—'}</td>
+        <td style="font-size:12px;font-family:var(--font-mono)">${c.sent_count}/${c.total_recipients} (${pct}%)</td>
+        <td>${statusHTML(c.status)}</td>
+        <td>
+          ${canSend
+            ? `<button class="action-btn" onclick="sendCampaign('${c.id}','${c.status}')">${c.status === 'partial' ? 'Continue' : 'Send'}${remaining > 270 ? ' (270)' : ''}</button>`
+            : '<span style="font-size:11px;color:var(--muted)">Done</span>'}
+          <button class="action-btn" onclick="deleteCampaign('${c.id}','${c.name.replace(/'/g,"")}')" style="margin-left:6px;color:var(--hot);border-color:transparent" title="Delete">🗑</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Could not load campaigns</p></div></td></tr>`;
+  }
+}
+
+async function sendCampaign(campaignId, status) {
+  const verb = status === 'partial' ? 'Continue sending' : 'Send';
+  if (!confirm(`${verb} this campaign now?\n\nUp to 270 emails will be sent (Brevo daily limit). If there are more, come back tomorrow to continue.`)) return;
+
+  showNotif('Sending...', 'Campaign is being sent, please wait');
+
+  try {
+    const r = await fetch(`${API}/campaigns/${campaignId}/send`, {method:'POST', headers:authHeaders()});
+    const d = await r.json();
+    if (r.ok) {
+      showNotif('Campaign sent', d.message);
+      alert(d.message);
+      loadCampaigns();
+    } else {
+      showNotif('Error', d.detail || 'Could not send campaign');
+    }
+  } catch (e) {
+    showNotif('Error', 'Connection error during send');
+  }
+}
+
+async function deleteCampaign(campaignId, name) {
+  if (!confirm(`Delete campaign "${name}"?\n\nThis removes the campaign and its recipient records. This cannot be undone.`)) return;
+  const r = await fetch(`${API}/campaigns/${campaignId}`, {method:'DELETE', headers:authHeaders()});
+  if (r.ok || r.status === 204) {
+    showNotif('Campaign deleted', `${name} removed`);
+    loadCampaigns();
+  } else {
+    showNotif('Error', 'Could not delete campaign');
+  }
+}
+['camp-region','camp-source','camp-score','camp-status'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', updateCampaignCount);
+  document.getElementById(id)?.addEventListener('change', updateCampaignCount);
 });

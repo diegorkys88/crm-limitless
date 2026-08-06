@@ -85,6 +85,10 @@
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Appointments
     </div>
+    <div class="nav-item" onclick="showPage('campaigns')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      Campaigns
+    </div>
 
     <div class="nav-section">Sources</div>
     <div class="nav-item" onclick="showPage('sync')">
@@ -310,6 +314,106 @@
             </tr>
           </thead>
           <tbody id="appointments-body"></tbody>
+        </table>
+      </div>
+    </div>
+        <!-- CAMPAIGNS PAGE -->
+    <div id="page-campaigns" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+        <!-- Create Campaign -->
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">NEW CAMPAIGN</div></div>
+          <div style="padding:20px">
+            <div class="field" style="margin-bottom:12px">
+              <label>Campaign Name</label>
+              <input type="text" id="camp-name" placeholder="Conference NY - Aug 6">
+            </div>
+
+            <div class="field" style="margin-bottom:12px">
+              <label>What's the email about? (Claude will write it)</label>
+              <textarea id="camp-prompt" placeholder="Invite everyone to a leadership conference in NY, at the stadium, Aug 6th at 4pm. Free entry, focused on how to be a better leader." style="width:100%;min-height:90px;background:var(--gray2);border:1px solid var(--border);color:var(--white);padding:10px;font-size:13px;font-family:var(--font-body);border-radius:4px;outline:none;resize:vertical;line-height:1.5"></textarea>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+              <div class="field">
+                <label>Region</label>
+                <input type="text" id="camp-region" placeholder="all or e.g. New York" value="all">
+              </div>
+              <div class="field">
+                <label>Source</label>
+                <select id="camp-source">
+                  <option value="all">All sources</option>
+                  <option value="kajabi">Kajabi</option>
+                  <option value="apollo">Apollo</option>
+                  <option value="calendly">Calendly</option>
+                  <option value="event">Event</option>
+                  <option value="manual">Manual</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Score</label>
+                <select id="camp-score">
+                  <option value="all">All scores</option>
+                  <option value="hot">Hot</option>
+                  <option value="warm">Warm</option>
+                  <option value="cold">Cold</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Status</label>
+                <select id="camp-status">
+                  <option value="all">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="contacted">Contacted</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="camp-count" style="font-size:12px;color:var(--muted);font-family:var(--font-mono);margin-bottom:12px">— recipients match these filters</div>
+
+            <button class="btn btn-primary" id="camp-generate-btn" onclick="generateCampaign()" style="width:100%">Generate Email with AI</button>
+            <div id="camp-gen-result" style="margin-top:10px;font-size:12px;font-family:var(--font-mono)"></div>
+          </div>
+        </div>
+
+        <!-- Review + Send -->
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">REVIEW &amp; SEND</div></div>
+          <div style="padding:20px">
+            <div class="field" style="margin-bottom:12px">
+              <label>Subject — editable</label>
+              <input type="text" id="camp-subject" placeholder="Generate the email first...">
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label>Body — editable ({first_name} personalizes each email)</label>
+              <textarea id="camp-body" placeholder="The AI-written email will appear here for you to review and edit..." style="width:100%;min-height:220px;background:var(--gray2);border:1px solid var(--border);color:var(--white);padding:12px;font-size:13px;font-family:var(--font-body);border-radius:4px;outline:none;resize:vertical;line-height:1.6"></textarea>
+            </div>
+            <button class="btn btn-primary" id="camp-create-btn" onclick="createCampaign()" style="width:100%" disabled>Create Campaign &amp; Prepare Send</button>
+            <div id="camp-create-result" style="margin-top:10px;font-size:12px;font-family:var(--font-mono)"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Campaigns list -->
+      <div class="panel" style="margin-top:20px">
+        <div class="panel-header">
+          <div class="panel-title">CAMPAIGNS</div>
+          <button class="btn btn-ghost" onclick="loadCampaigns()" style="padding:5px 10px;font-size:11px">Refresh</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Campaign</th>
+              <th>Subject</th>
+              <th>Progress</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="campaigns-body">
+            <tr><td colspan="5"><div class="empty-state"><p>No campaigns yet</p></div></td></tr>
+          </tbody>
         </table>
       </div>
     </div>

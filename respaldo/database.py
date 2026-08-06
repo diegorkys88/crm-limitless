@@ -141,49 +141,6 @@ class SyncLog(Base):
     contact     = relationship("Contact", back_populates="sync_logs")
 
 
-
-class Campaign(Base):
-    """A mass email campaign (e.g. conference invitation) — separate from Outreach."""
-    __tablename__ = "campaigns"
-
-    id           = Column(String(36), primary_key=True, default=gen_uuid)
-    name         = Column(String(200), nullable=False)   # "Conference NY - Aug 6"
-    prompt       = Column(Text)                            # what the user asked Claude
-    subject      = Column(String(500))
-    body         = Column(Text)                            # the approved email body
-    # Filters used (stored for reference)
-    filter_region = Column(String(120))
-    filter_source = Column(String(50))
-    filter_score  = Column(String(20))
-    filter_status = Column(String(50))
-    # Totals
-    total_recipients = Column(String(10), default="0")
-    sent_count       = Column(String(10), default="0")
-    status           = Column(String(30), default="draft")  # draft | sending | partial | completed
-    daily_limit      = Column(String(10), default="270")
-
-    created_at   = Column(DateTime, server_default=func.now())
-    updated_at   = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-    recipients   = relationship("CampaignRecipient", back_populates="campaign", cascade="all, delete")
-
-
-class CampaignRecipient(Base):
-    """Each contact targeted by a campaign + their send status."""
-    __tablename__ = "campaign_recipients"
-
-    id          = Column(String(36), primary_key=True, default=gen_uuid)
-    campaign_id = Column(String(36), ForeignKey("campaigns.id"), nullable=False, index=True)
-    contact_id  = Column(String(36), ForeignKey("contacts.id"), nullable=True, index=True)
-    email       = Column(String(255))
-    name        = Column(String(255))
-    status      = Column(String(20), default="pending")  # pending | sent | failed
-    sent_at     = Column(DateTime)
-    error       = Column(Text)
-
-    campaign    = relationship("Campaign", back_populates="recipients")
-
-
 # ── Create all tables ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     engine = create_engine("sqlite:///crm.db", echo=True)

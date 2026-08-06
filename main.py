@@ -8,7 +8,7 @@ from db_session import engine
 import os
 from dotenv import load_dotenv
 
-from routers import contacts, outreach, appointments, users, sync, webhooks, auth, public
+from routers import contacts, outreach, appointments, users, sync, webhooks, auth, public,campaigns
 
 load_dotenv()
 
@@ -43,6 +43,7 @@ app.include_router(appointments.router, prefix="/appointments", tags=["Appointme
 app.include_router(users.router,        prefix="/users",        tags=["Users"])
 app.include_router(sync.router,         prefix="/sync",         tags=["Sync"])
 app.include_router(webhooks.router,     prefix="/webhooks",     tags=["Webhooks"])
+app.include_router(campaigns.router,    prefix="/campaigns",    tags=["Campaigns"])
 
 # ── Dashboard route BEFORE static mount ───────────────────────────────────────
 @app.get("/dashboard", include_in_schema=False)
