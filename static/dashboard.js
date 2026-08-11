@@ -917,23 +917,23 @@ async function runApolloSearch() {
   const region   = document.getElementById('apollo-region').value;
   const industry = document.getElementById('apollo-industry').value;
   const limit    = document.getElementById('apollo-limit').value;
-  const enrich   = document.getElementById('apollo-enrich').checked;
   const btn      = document.getElementById('apollo-search-btn');
   const res      = document.getElementById('apollo-result');
 
   btn.disabled = true;
-  btn.textContent = enrich ? 'Searching & importing...' : 'Searching (preview)...';
+  btn.textContent = 'Searching & importing...';
   res.style.color = 'var(--muted)';
-  res.textContent = 'Searching Apollo...';
+  res.textContent = 'Searching Apollo and importing...';
 
   try {
-    const r = await fetch(`${API}/sync/apollo/search/sync?region=${encodeURIComponent(region)}&industry=${encodeURIComponent(industry)}&limit=${limit}&enrich=${enrich}`, {method:'POST', headers:authHeaders()});
+    // enrich is always true now — search always imports + enriches
+    const r = await fetch(`${API}/sync/apollo/search/sync?region=${encodeURIComponent(region)}&industry=${encodeURIComponent(industry)}&limit=${limit}&enrich=true`, {method:'POST', headers:authHeaders()});
     const d = await r.json();
 
     if (d.error) {
       res.style.color = 'var(--hot)';
       res.textContent = `Error: ${d.error}`;
-    } else if (enrich) {
+    } else {
       res.style.color = 'var(--green)';
       res.textContent = `✓ Found: ${d.found} | Approved: ${d.approved} | Imported: ${d.imported} | Skipped: ${d.skipped}`;
       if (d.skip_reasons && d.skip_reasons.length) {
@@ -942,9 +942,6 @@ async function runApolloSearch() {
       if (d.imported > 0) showNotif('Apollo Import', `${d.imported} new contacts imported and classified`);
       await loadData();
       applyFilters();
-    } else {
-      res.style.color = 'var(--green)';
-      res.textContent = `Preview: found ${d.found} contacts. Check "Enrich & import" to save them.`;
     }
   } catch (e) {
     res.style.color = 'var(--hot)';

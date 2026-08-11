@@ -50,7 +50,7 @@ function updateStats() {
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
 function showPage(page) {
-  ['dashboard','contacts','outreach','appointments','sync','settings'].forEach(p => {
+  ['dashboard','contacts','outreach','appointments','campaigns','sync','settings'].forEach(p => {
     document.getElementById(`page-${p}`).style.display = 'none';
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   });
@@ -63,6 +63,7 @@ function showPage(page) {
   if (page === 'contacts')     { currentContactPage = 1; renderContactsTable(allContacts, true); }
   if (page === 'outreach')     renderOutreachTable();
   if (page === 'appointments') renderAppointmentsTable();
+  if (page === 'campaigns')    loadCampaigns();
   if (page === 'settings')     loadUsers();
 }
 
@@ -513,7 +514,7 @@ async function sendFromModal() {
       body: JSON.stringify({subject, body})
     });
 
-    const r = await fetch(`${API}/outreach/${currentOutreachId}/send?sender_name=Diego`, {
+    const r = await fetch(`${API}/outreach/${currentOutreachId}/send`, {
       method: 'POST', headers: authHeaders()
     });
     const d = await r.json();
@@ -690,6 +691,10 @@ function openDetail(id) {
   const fBtn = document.getElementById('d-followup-btn');
   if (fBtn) fBtn.style.display = (c.status === 'outreach_sent') ? 'inline-flex' : 'none';
 
+  // No Show button: only for contacts with a scheduled meeting
+  const nsBtn = document.getElementById('d-noshow-btn');
+  if (nsBtn) nsBtn.style.display = (c.status === 'appointment_scheduled') ? 'inline-flex' : 'none';
+
   // Check for AI summary
   const appt = allAppointments.find(a => a.contact_id === id && a.ai_summary);
   if (appt) {
@@ -816,7 +821,7 @@ async function sendGeneratedOutreach(outreachId) {
   res.style.color = 'var(--muted)';
   res.textContent = 'Sending...';
 
-  const r = await fetch(`${API}/outreach/${outreachId}/send?sender_name=Diego`, {method:'POST', headers:authHeaders()});
+  const r = await fetch(`${API}/outreach/${outreachId}/send`, {method:'POST', headers:authHeaders()});
   const d = await r.json();
   if (r.ok) {
     res.style.color = 'var(--green)';
@@ -831,7 +836,7 @@ async function sendGeneratedOutreach(outreachId) {
 }
 
 async function sendOutreach(outreachId) {
-  const r = await fetch(`${API}/outreach/${outreachId}/send?sender_name=Diego`, {method:'POST', headers:authHeaders()});
+  const r = await fetch(`${API}/outreach/${outreachId}/send`, {method:'POST', headers:authHeaders()});
   const d = await r.json();
   if (r.ok) { showNotif('Email Sent!', `Delivered successfully`); await loadData(); renderOutreachTable(); }
 }
@@ -1085,13 +1090,15 @@ function showApp() {
     if (oldBadge) oldBadge.remove();
 
     // Show role badge
+  // Show role badge
     const roleEl = document.createElement('span');
     roleEl.className = `role-badge role-${currentUserData.role}`;
-    roleEl.textContent = currentUserData.role === 'admin' ? 'ADMIN' : 'SALES';
+    roleEl.textContent = currentUserData.role === 'super_admin' ? 'SUPER ADMIN' : 'ADMIN';
     document.getElementById('user-name').after(roleEl);
 
-    // Show admin nav, hide sync for sales reps
-    if (currentUserData.role === 'admin') {
+    // Both admin and super_admin get full access
+    const isAdmin = currentUserData.role === 'admin' || currentUserData.role === 'super_admin';
+    if (isAdmin) {
       document.getElementById('nav-section-admin').style.display = 'block';
       document.getElementById('nav-settings').style.display      = 'flex';
     } else {
@@ -1216,10 +1223,14 @@ async function loadUsers() {
         <div style="font-size:13px;font-weight:500;color:var(--white)">${u.name}</div>
         <div style="font-size:11px;color:var(--muted)">${u.email}</div>
       </div>
-      <span class="role-badge role-${u.role}">${u.role === 'admin' ? 'ADMIN' : 'SALES'}</span>
+     <span class="role-badge role-${u.role}">${u.role === 'super_admin' ? 'SUPER ADMIN' : 'ADMIN'}</span>
       ${u.is_active === 'false'
         ? '<span style="font-size:10px;color:var(--hot);font-family:var(--font-mono)">INACTIVE</span>'
         : `<button class="action-btn" onclick="deactivateUser('${u.id}','${u.name}')">Deactivate</button>`
+      }
+       ${u.role !== 'super_admin'
+        ? `<button class="action-btn" onclick="deleteUser('${u.id}','${u.name}')" style="color:var(--hot);border-color:transparent" title="Delete permanently">🗑</button>`
+        : ''
       }
     </div>`).join('');
 }
@@ -1228,6 +1239,18 @@ async function deactivateUser(userId, userName) {
   if (!confirm(`Deactivate ${userName}? They will no longer be able to log in.`)) return;
   const r = await fetch(`${API}/auth/users/${userId}/deactivate`, {method:'PATCH', headers:authHeaders()});
   if (r.ok) { showNotif('User deactivated', `${userName} can no longer log in`); loadUsers(); }
+}
+
+async function deleteUser(userId, userName) {
+  if (!confirm(`Delete ${userName} permanently?\n\nThis cannot be undone. Their appointments will be reassigned to the super admin.`)) return;
+  const r = await fetch(`${API}/auth/users/${userId}`, {method:'DELETE', headers:authHeaders()});
+  if (r.ok || r.status === 204) {
+    showNotif('User deleted', `${userName} removed permanently`);
+    loadUsers();
+  } else {
+    const d = await r.json().catch(() => ({}));
+    showNotif('Error', d.detail || 'Could not delete user');
+  }
 }
 
 async function changePassword() {
@@ -1285,6 +1308,90 @@ async function deleteContact() {
 }
 
 // ── CLOSE CONTACT ────────────────────────────────────────────────────────────
+async function runRemindOverdue() {
+  const res = document.getElementById('remind-overdue-result');
+  if (!confirm('Send reminder emails to reps for meetings that already passed but haven\'t been closed out?')) return;
+
+  res.style.color = 'var(--muted)';
+  res.style.padding = '10px 20px';
+  res.textContent = 'Checking for overdue meetings...';
+
+  try {
+    const r = await fetch(`${API}/appointments/remind-overdue?grace_hours=2`, {
+      method: 'POST', headers: authHeaders()
+    });
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ ${d.overdue_found} overdue found, ${d.reminded} reminder(s) sent to reps.`;
+      if (d.reminded > 0) showNotif('Reminders sent', `${d.reminded} rep(s) notified about pending meetings`);
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not check overdue meetings';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  }
+}
+
+async function clearAllAppointments() {
+  if (!confirm('Delete ALL appointments?\n\nThis is for test-data cleanup. Contacts in "Meeting Set" will move back to "Contacted". This cannot be undone.')) return;
+  const res = document.getElementById('remind-overdue-result');
+  res.style.color = 'var(--muted)';
+  res.style.padding = '10px 20px';
+  res.textContent = 'Clearing all appointments...';
+  try {
+    const r = await fetch(`${API}/appointments/all/clear?reset_contacts=true`, {method:'DELETE', headers:authHeaders()});
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ Deleted ${d.appointments_deleted} appointment(s), reset ${d.contacts_reset} contact(s).`;
+      showNotif('Appointments cleared', `${d.appointments_deleted} deleted`);
+      await loadData();
+      renderAppointmentsTable();
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not clear appointments';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  }
+}
+
+async function markNoShow() {
+  if (!currentContact) return;
+  const name = `${currentContact.first_name || ''} ${currentContact.last_name || ''}`.trim() || currentContact.email;
+  if (!confirm(`Mark ${name} as No Show?\n\nThe meeting will be marked as no-show and the contact moves back so you can send a follow-up to reschedule.`)) return;
+
+  const res = document.getElementById('d-action-result');
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Marking as no-show...';
+
+  try {
+    const r = await fetch(`${API}/appointments/${currentContact.id}/no-show`, {
+      method: 'POST', headers: authHeaders()
+    });
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = '✓ Marked as no-show. Use "Follow Up" to send a reschedule email.';
+      showNotif('No Show', `${name} marked as no-show`);
+      await loadData();
+      // Refresh the open panel
+      currentContact = allContacts.find(c => c.id === currentContact.id);
+      if (currentContact) openDetail(currentContact.id);
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not mark no-show';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  }
+}
+
 async function closeContact(result) {
   if (!currentContact) return;
   const label = result === 'won' ? 'Close Won' : 'Close Lost';
@@ -1409,4 +1516,186 @@ document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     if (window.innerWidth <= 768) closeSidebar();
   });
+});
+
+// ── CAMPAIGNS ─────────────────────────────────────────────────────────────────
+let campaignEmailReady = false;
+
+async function updateCampaignCount() {
+  const region = document.getElementById('camp-region').value.trim() || 'all';
+  const source = document.getElementById('camp-source').value;
+  const score  = document.getElementById('camp-score').value;
+  const status = document.getElementById('camp-status').value;
+  const el = document.getElementById('camp-count');
+  try {
+    const r = await fetch(`${API}/campaigns/preview-count?region=${encodeURIComponent(region)}&source=${source}&score=${score}&status=${status}`, {headers:authHeaders()});
+    const d = await r.json();
+    const n = d.count || 0;
+    let msg = `${n} recipients match these filters`;
+    if (n > 270) msg += ` — will send 270 today, ${n - 270} tomorrow`;
+    el.textContent = msg;
+    el.style.color = n > 0 ? 'var(--green)' : 'var(--muted)';
+  } catch (e) {
+    el.textContent = '— recipients';
+  }
+}
+
+async function generateCampaign() {
+  const prompt = document.getElementById('camp-prompt').value.trim();
+  const btn = document.getElementById('camp-generate-btn');
+  const res = document.getElementById('camp-gen-result');
+
+  if (!prompt) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Describe what the email is about first.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Writing with AI...';
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Claude is drafting the email...';
+
+  try {
+    const r = await fetch(`${API}/campaigns/generate`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({prompt})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      document.getElementById('camp-subject').value = d.subject || '';
+      document.getElementById('camp-body').value    = d.body || '';
+      res.style.color = 'var(--green)';
+      res.textContent = '✓ Email drafted. Review and edit it on the right, then create the campaign.';
+      campaignEmailReady = true;
+      document.getElementById('camp-create-btn').disabled = false;
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not generate email';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Email with AI';
+  }
+}
+
+async function createCampaign() {
+  const name    = document.getElementById('camp-name').value.trim();
+  const subject = document.getElementById('camp-subject').value.trim();
+  const body    = document.getElementById('camp-body').value.trim();
+  const prompt  = document.getElementById('camp-prompt').value.trim();
+  const region  = document.getElementById('camp-region').value.trim() || 'all';
+  const source  = document.getElementById('camp-source').value;
+  const score   = document.getElementById('camp-score').value;
+  const status  = document.getElementById('camp-status').value;
+  const btn = document.getElementById('camp-create-btn');
+  const res = document.getElementById('camp-create-result');
+
+  if (!name)    { res.style.color='var(--hot)'; res.textContent='Campaign name is required'; return; }
+  if (!subject || !body) { res.style.color='var(--hot)'; res.textContent='Generate the email first'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating...';
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Building recipient list...';
+
+  try {
+    const r = await fetch(`${API}/campaigns/create`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({name, subject, body, prompt, region, source, score, status})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ Campaign created with ${d.total_recipients} recipients. Send it from the list below.`;
+      showNotif('Campaign created', `${d.total_recipients} recipients ready`);
+      // Reset form
+      document.getElementById('camp-name').value = '';
+      document.getElementById('camp-prompt').value = '';
+      document.getElementById('camp-subject').value = '';
+      document.getElementById('camp-body').value = '';
+      document.getElementById('camp-create-btn').disabled = true;
+      loadCampaigns();
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not create campaign';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Campaign & Prepare Send';
+  }
+}
+
+async function loadCampaigns() {
+  const tbody = document.getElementById('campaigns-body');
+  try {
+    const r = await fetch(`${API}/campaigns/`, {headers:authHeaders()});
+    const campaigns = await r.json();
+    if (!campaigns.length) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No campaigns yet</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = campaigns.map(c => {
+      const pct = c.total_recipients ? Math.round((c.sent_count / c.total_recipients) * 100) : 0;
+      const remaining = c.total_recipients - c.sent_count;
+      const canSend = c.status === 'draft' || c.status === 'partial';
+      return `<tr class="fade-in">
+        <td><div class="contact-name">${c.name}</div>
+          <div class="contact-company" style="font-size:11px">${new Date(c.created_at).toLocaleDateString()}</div></td>
+        <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.subject || '—'}</td>
+        <td style="font-size:12px;font-family:var(--font-mono)">${c.sent_count}/${c.total_recipients} (${pct}%)</td>
+        <td>${statusHTML(c.status)}</td>
+        <td>
+          ${canSend
+            ? `<button class="action-btn" onclick="sendCampaign('${c.id}','${c.status}')">${c.status === 'partial' ? 'Continue' : 'Send'}${remaining > 270 ? ' (270)' : ''}</button>`
+            : '<span style="font-size:11px;color:var(--muted)">Done</span>'}
+          <button class="action-btn" onclick="deleteCampaign('${c.id}','${c.name.replace(/'/g,"")}')" style="margin-left:6px;color:var(--hot);border-color:transparent" title="Delete">🗑</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Could not load campaigns</p></div></td></tr>`;
+  }
+}
+
+async function sendCampaign(campaignId, status) {
+  const verb = status === 'partial' ? 'Continue sending' : 'Send';
+  if (!confirm(`${verb} this campaign now?\n\nUp to 270 emails will be sent (Brevo daily limit). If there are more, come back tomorrow to continue.`)) return;
+
+  showNotif('Sending...', 'Campaign is being sent, please wait');
+
+  try {
+    const r = await fetch(`${API}/campaigns/${campaignId}/send`, {method:'POST', headers:authHeaders()});
+    const d = await r.json();
+    if (r.ok) {
+      showNotif('Campaign sent', d.message);
+      alert(d.message);
+      loadCampaigns();
+    } else {
+      showNotif('Error', d.detail || 'Could not send campaign');
+    }
+  } catch (e) {
+    showNotif('Error', 'Connection error during send');
+  }
+}
+
+async function deleteCampaign(campaignId, name) {
+  if (!confirm(`Delete campaign "${name}"?\n\nThis removes the campaign and its recipient records. This cannot be undone.`)) return;
+  const r = await fetch(`${API}/campaigns/${campaignId}`, {method:'DELETE', headers:authHeaders()});
+  if (r.ok || r.status === 204) {
+    showNotif('Campaign deleted', `${name} removed`);
+    loadCampaigns();
+  } else {
+    showNotif('Error', 'Could not delete campaign');
+  }
+}
+['camp-region','camp-source','camp-score','camp-status'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', updateCampaignCount);
+  document.getElementById(id)?.addEventListener('change', updateCampaignCount);
 });
