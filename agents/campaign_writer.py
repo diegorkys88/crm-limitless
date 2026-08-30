@@ -16,6 +16,7 @@ STYLE GUIDELINES:
 - Do NOT invent details the user didn't give. If a detail is missing, keep it general.
 - Do NOT include a signature or footer — the system adds branding automatically.
 - Do NOT include a subject line inside the body.
+- Do NOT use em-dashes (—) anywhere. Use commas, periods, or normal hyphens instead.
 
 You MUST respond ONLY with valid JSON — no markdown, no backticks:
 {
@@ -40,6 +41,13 @@ and only use details provided above.
 """
         raw = self.run(user_prompt, SYSTEM_PROMPT, max_tokens=800)
         result = self._parse_json(raw)
+
+        # Safety net: strip any em-dashes the model may have used
+        if result.get("body"):
+            result["body"] = _strip_emdash(result["body"])
+        if result.get("subject"):
+            result["subject"] = _strip_emdash(result["subject"])
+
         return result
 
     def _parse_json(self, raw: str) -> dict:
@@ -60,9 +68,17 @@ and only use details provided above.
                 pass
         # Fallback
         return {
-            "subject": "You're Invited — Limitless Leadership",
+            "subject": "You're Invited, Limitless Leadership",
             "body": text or "Hi {first_name},\\n\\nWe'd love to invite you to an upcoming event."
         }
+
+
+def _strip_emdash(text: str) -> str:
+    """Replace em-dashes and en-dashes with a comma, cleaning surrounding spaces."""
+    import re
+    text = re.sub(r'\s*[—–]\s*', ', ', text)
+    text = re.sub(r',\s*,', ',', text)
+    return text
 
 
 campaign_writer_agent = CampaignWriterAgent()

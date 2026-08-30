@@ -24,6 +24,19 @@ SOCIAL = {
 WEBSITE = "https://limitlessleadership.co/"
 
 
+def strip_emdash(text: str) -> str:
+    """
+    Replace em-dashes (—) and en-dashes (–) with a comma.
+    Cleans up surrounding spaces and avoids doubled commas.
+    This runs on every email so no dash slips through, even from manual edits.
+    """
+    if not text:
+        return text
+    text = re.sub(r'\s*[—–]\s*', ', ', text)
+    text = re.sub(r',\s*,', ',', text)
+    return text
+
+
 def build_email_html(body: str, sender_name: str = "The Limitless Leadership Team") -> str:
     """
     Professional HTML email for Limitless Leadership.
@@ -164,6 +177,10 @@ class EmailService:
 
         sender = sender_name or EMAIL_FROM_NAME
         body   = body.replace("[Your Name]", sender).replace("[YOUR NAME]", sender)
+
+        # Final safety net: remove em-dashes from subject and body before sending
+        subject = strip_emdash(subject)
+        body    = strip_emdash(body)
 
         html_body  = build_email_html(body, sender)
         plain_body = body

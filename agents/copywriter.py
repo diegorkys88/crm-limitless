@@ -18,6 +18,7 @@ WRITING RULES:
 - Do NOT sound like a mass email — it must feel 1-on-1
 - End with a clear call to action using the Calendly link provided
 - Do NOT use buzzwords like "synergy", "leverage", "game-changer"
+- Do NOT use em-dashes (—) anywhere. Use commas, periods, or normal hyphens instead.
 
 You MUST respond ONLY with a valid JSON object — no markdown, no backticks, no extra text.
 Format:
@@ -52,8 +53,24 @@ Include this Calendly link in the call to action: {calendly_link}
                 "body": raw
             }
 
+        # Safety net: strip any em-dashes the model may have used
+        if result.get("body"):
+            result["body"] = _strip_emdash(result["body"])
+        if result.get("subject"):
+            result["subject"] = _strip_emdash(result["subject"])
+
         self.log(db, contact.id, "generated_email", profile, raw)
         return result
+
+
+def _strip_emdash(text: str) -> str:
+    """Replace em-dashes and en-dashes with a comma, cleaning surrounding spaces."""
+    import re
+    # Replace " — " or "—" (and en-dash –) with ", "
+    text = re.sub(r'\s*[—–]\s*', ', ', text)
+    # Avoid doubled commas if the model already had one nearby
+    text = re.sub(r',\s*,', ',', text)
+    return text
 
 
 copywriter_agent = CopywriterAgent()
