@@ -1652,6 +1652,9 @@ async function loadCampaigns() {
           ${canSend
             ? `<button class="action-btn" onclick="sendCampaign('${c.id}','${c.status}')">${c.status === 'partial' ? 'Continue' : 'Send'}${remaining > 270 ? ' (270)' : ''}</button>`
             : '<span style="font-size:11px;color:var(--muted)">Done</span>'}
+          ${c.status === 'draft'
+            ? `<button class="action-btn" onclick="openCampaignEditModal('${c.id}')" style="margin-left:6px">Edit</button>`
+            : ''}
           <button class="action-btn" onclick="deleteCampaign('${c.id}','${c.name.replace(/'/g,"")}')" style="margin-left:6px;color:var(--hot);border-color:transparent" title="Delete">🗑</button>
         </td>
       </tr>`;
@@ -1690,6 +1693,78 @@ async function deleteCampaign(campaignId, name) {
     loadCampaigns();
   } else {
     showNotif('Error', 'Could not delete campaign');
+  }
+}
+
+// ── CAMPAIGN EDIT ─────────────────────────────────────────────────────────────
+let editingCampaignId = null;
+
+async function openCampaignEditModal(campaignId) {
+  editingCampaignId = campaignId;
+  const res = document.getElementById('cedit-result');
+  res.textContent = '';
+  try {
+    const r = await fetch(`${API}/campaigns/${campaignId}`, {headers:authHeaders()});
+    const d = await r.json();
+    if (r.ok) {
+      document.getElementById('cedit-name').value    = d.name || '';
+      document.getElementById('cedit-subject').value = d.subject || '';
+      document.getElementById('cedit-body').value    = d.body || '';
+      document.getElementById('campaign-edit-modal').classList.add('open');
+    } else {
+      showNotif('Error', d.detail || 'Could not load campaign');
+    }
+  } catch (e) {
+    showNotif('Error', 'Connection error');
+  }
+}
+
+function closeCampaignEditModal() {
+  document.getElementById('campaign-edit-modal').classList.remove('open');
+  editingCampaignId = null;
+}
+
+async function saveCampaignEdit() {
+  if (!editingCampaignId) return;
+  const name    = document.getElementById('cedit-name').value.trim();
+  const subject = document.getElementById('cedit-subject').value.trim();
+  const body    = document.getElementById('cedit-body').value.trim();
+  const btn = document.getElementById('cedit-save-btn');
+  const res = document.getElementById('cedit-result');
+
+  if (!name || !subject || !body) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Name, subject and body are required';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Saving changes...';
+
+  try {
+    const r = await fetch(`${API}/campaigns/${editingCampaignId}`, {
+      method: 'PATCH', headers: authHeaders(),
+      body: JSON.stringify({name, subject, body})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      res.style.color = 'var(--green)';
+      res.textContent = '✓ Campaign updated';
+      showNotif('Campaign updated', 'Changes saved');
+      loadCampaigns();
+      setTimeout(closeCampaignEditModal, 1000);
+    } else {
+      res.style.color = 'var(--hot)';
+      res.textContent = d.detail || 'Could not save changes';
+    }
+  } catch (e) {
+    res.style.color = 'var(--hot)';
+    res.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
   }
 }
 ['camp-region','camp-source','camp-score','camp-status'].forEach(id => {

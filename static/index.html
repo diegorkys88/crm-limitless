@@ -685,6 +685,35 @@
   </div>
 </div>
 
+<!-- CAMPAIGN EDIT MODAL -->
+<div class="modal-overlay" id="campaign-edit-modal">
+  <div class="modal" style="width:640px">
+    <div class="modal-header">
+      <div class="modal-title">EDIT CAMPAIGN</div>
+      <button class="modal-close" onclick="closeCampaignEditModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field full" style="margin-bottom:14px">
+        <label>Campaign Name</label>
+        <input type="text" id="cedit-name" style="width:100%">
+      </div>
+      <div class="field full" style="margin-bottom:14px">
+        <label>Subject</label>
+        <input type="text" id="cedit-subject" style="width:100%">
+      </div>
+      <div class="field full">
+        <label>Body — editable ({first_name} personalizes each email)</label>
+        <textarea id="cedit-body" style="width:100%;min-height:280px;background:var(--gray2);border:1px solid var(--border);color:var(--white);padding:12px;font-size:13px;font-family:var(--font-body);border-radius:4px;outline:none;resize:vertical;line-height:1.6"></textarea>
+      </div>
+      <div id="cedit-result" style="margin-top:10px;font-size:12px;font-family:var(--font-mono)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCampaignEditModal()">Cancel</button>
+      <button class="btn btn-primary" id="cedit-save-btn" onclick="saveCampaignEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- NOTIFICATION -->
 <div class="notif" id="notif" style="display:none">
   <div class="notif-dot"></div>

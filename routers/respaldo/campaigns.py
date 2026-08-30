@@ -262,40 +262,6 @@ def get_campaign(campaign_id: str, db: Session = Depends(get_db)):
     }
 
 
-# ── Edit a draft campaign (name / subject / body) ─────────────────────────────
-@router.patch("/{campaign_id}")
-def update_campaign(campaign_id: str, data: dict, db: Session = Depends(get_db)):
-    """
-    Edit a campaign's name, subject, or body before sending.
-    Only allowed while the campaign is still a draft (nothing sent yet).
-    """
-    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-
-    if campaign.status not in ("draft",):
-        raise HTTPException(
-            status_code=409,
-            detail="Only draft campaigns can be edited. This one has already started sending."
-        )
-
-    if "name" in data and data["name"].strip():
-        campaign.name = data["name"].strip()
-    if "subject" in data and data["subject"].strip():
-        campaign.subject = data["subject"].strip()
-    if "body" in data and data["body"].strip():
-        campaign.body = data["body"].strip()
-
-    db.commit()
-    return {
-        "status":  "updated",
-        "id":      campaign.id,
-        "name":    campaign.name,
-        "subject": campaign.subject,
-        "body":    campaign.body,
-    }
-
-
 # ── Delete campaign ───────────────────────────────────────────────────────────
 @router.delete("/{campaign_id}", status_code=204)
 def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
