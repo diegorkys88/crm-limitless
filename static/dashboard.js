@@ -1642,7 +1642,7 @@ async function loadCampaigns() {
       const pct = c.total_recipients ? Math.round((c.sent_count / c.total_recipients) * 100) : 0;
       const remaining = c.total_recipients - c.sent_count;
       const canSend = c.status === 'draft' || c.status === 'partial';
-      return `<tr class="fade-in">
+      return `<tr class="fade-in" onclick="openCampaignDetailsModal('${c.id}')" style="cursor:pointer">
         <td><div class="contact-name">${c.name}</div>
           <div class="contact-company" style="font-size:11px">${new Date(c.created_at).toLocaleDateString()}</div></td>
         <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.subject || '—'}</td>
@@ -1650,12 +1650,12 @@ async function loadCampaigns() {
         <td>${statusHTML(c.status)}</td>
         <td>
           ${canSend
-            ? `<button class="action-btn" onclick="sendCampaign('${c.id}','${c.status}')">${c.status === 'partial' ? 'Continue' : 'Send'}${remaining > 270 ? ' (270)' : ''}</button>`
+            ? `<button class="action-btn" onclick="event.stopPropagation();sendCampaign('${c.id}','${c.status}')">${c.status === 'partial' ? 'Continue' : 'Send'}${remaining > 270 ? ' (270)' : ''}</button>`
             : '<span style="font-size:11px;color:var(--muted)">Done</span>'}
           ${c.status === 'draft'
-            ? `<button class="action-btn" onclick="openCampaignEditModal('${c.id}')" style="margin-left:6px">Edit</button>`
+            ? `<button class="action-btn" onclick="event.stopPropagation();openCampaignEditModal('${c.id}')" style="margin-left:6px">Edit</button>`
             : ''}
-          <button class="action-btn" onclick="deleteCampaign('${c.id}','${c.name.replace(/'/g,"")}')" style="margin-left:6px;color:var(--hot);border-color:transparent" title="Delete">🗑</button>
+          <button class="action-btn" onclick="event.stopPropagation();deleteCampaign('${c.id}','${c.name.replace(/'/g,"")}')" style="margin-left:6px;color:var(--hot);border-color:transparent" title="Delete">🗑</button>
         </td>
       </tr>`;
     }).join('');
@@ -1767,6 +1767,108 @@ async function saveCampaignEdit() {
     btn.textContent = 'Save Changes';
   }
 }
+// ── CAMPAIGN DETAILS ──────────────────────────────────────────────────────────
+const CAMPAIGN_RECIPIENT_LIST_MAX = 100;  // show full list at or below this, else summary
+
+async function openCampaignDetailsModal(campaignId) {
+  const modal = document.getElementById('campaign-details-modal');
+  const bodyEl = document.getElementById('cdet-body');
+  document.getElementById('cdet-title').textContent = 'CAMPAIGN DETAILS';
+  bodyEl.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
+  modal.classList.add('open');
+
+  try {
+    const r = await fetch(`${API}/campaigns/${campaignId}`, {headers:authHeaders()});
+    const d = await r.json();
+    if (!r.ok) {
+      bodyEl.innerHTML = `<div class="empty-state"><p>${d.detail || 'Could not load campaign'}</p></div>`;
+      return;
+    }
+
+    document.getElementById('cdet-title').textContent = d.name || 'CAMPAIGN DETAILS';
+
+    const recips = d.recipients || [];
+    const sent    = recips.filter(x => x.status === 'sent').length;
+    const pending = recips.filter(x => x.status === 'pending').length;
+    const failed  = recips.filter(x => x.status === 'failed').length;
+
+    // Filters used
+    const f = d.filters || {};
+    const filterChips = [
+      f.region && f.region !== 'all' ? `Region: ${f.region}` : null,
+      f.source && f.source !== 'all' ? `Source: ${f.source}` : null,
+      f.score  && f.score  !== 'all' ? `Score: ${f.score}`   : null,
+      f.status && f.status !== 'all' ? `Status: ${f.status}` : null,
+    ].filter(Boolean);
+    const filtersText = filterChips.length ? filterChips.join('  ·  ') : 'All contacts';
+
+    // Recipients block: full list if few, summary if many
+    let recipientsBlock = '';
+    if (recips.length <= CAMPAIGN_RECIPIENT_LIST_MAX) {
+      const rows = recips.map(x => {
+        const badge = x.status === 'sent'
+          ? '<span style="color:var(--green);font-size:11px;font-family:var(--font-mono)">✓ Sent</span>'
+          : x.status === 'failed'
+          ? '<span style="color:var(--hot);font-size:11px;font-family:var(--font-mono)">✗ Failed</span>'
+          : '<span style="color:var(--muted);font-size:11px;font-family:var(--font-mono)">Pending</span>';
+        const when = x.sent_at ? new Date(x.sent_at).toLocaleDateString() : '';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="flex:1">
+            <div style="font-size:13px;color:var(--white)">${x.name || '—'}</div>
+            <div style="font-size:11px;color:var(--muted)">${x.email || ''}</div>
+          </div>
+          <div style="text-align:right">${badge}<div style="font-size:10px;color:var(--muted)">${when}</div></div>
+        </div>`;
+      }).join('');
+      recipientsBlock = `
+        <div class="detail-section-title" style="margin-top:20px;margin-bottom:6px">RECIPIENTS (${recips.length})</div>
+        <div>${rows}</div>`;
+    } else {
+      recipientsBlock = `
+        <div class="detail-section-title" style="margin-top:20px;margin-bottom:10px">RECIPIENTS (${recips.length})</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div style="background:var(--gray2);border-radius:6px;padding:14px;text-align:center">
+            <div style="font-size:22px;font-weight:600;color:var(--green);font-family:var(--font-mono)">${sent}</div>
+            <div style="font-size:11px;color:var(--muted)">Sent</div>
+          </div>
+          <div style="background:var(--gray2);border-radius:6px;padding:14px;text-align:center">
+            <div style="font-size:22px;font-weight:600;color:var(--muted);font-family:var(--font-mono)">${pending}</div>
+            <div style="font-size:11px;color:var(--muted)">Pending</div>
+          </div>
+          <div style="background:var(--gray2);border-radius:6px;padding:14px;text-align:center">
+            <div style="font-size:22px;font-weight:600;color:var(--hot);font-family:var(--font-mono)">${failed}</div>
+            <div style="font-size:11px;color:var(--muted)">Failed</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">Too many recipients to list individually (${recips.length}). Showing summary.</div>`;
+    }
+
+    bodyEl.innerHTML = `
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+        ${statusHTML(d.status)}
+        <span style="font-size:12px;color:var(--muted);font-family:var(--font-mono)">${d.sent_count}/${d.total_recipients} sent</span>
+      </div>
+
+      <div class="detail-section-title" style="margin-bottom:6px">FILTERS USED</div>
+      <div style="font-size:12px;color:var(--white);margin-bottom:16px">${filtersText}</div>
+
+      <div class="detail-section-title" style="margin-bottom:6px">SUBJECT</div>
+      <div style="font-size:13px;color:var(--white);margin-bottom:16px">${d.subject || '—'}</div>
+
+      <div class="detail-section-title" style="margin-bottom:6px">EMAIL BODY</div>
+      <div style="background:var(--gray2);border:1px solid var(--border);border-radius:6px;padding:14px;font-size:13px;color:var(--muted);line-height:1.7;white-space:pre-wrap">${(d.body || '').replace(/</g,'&lt;')}</div>
+
+      ${recipientsBlock}
+    `;
+  } catch (e) {
+    bodyEl.innerHTML = '<div class="empty-state"><p>Connection error</p></div>';
+  }
+}
+
+function closeCampaignDetailsModal() {
+  document.getElementById('campaign-details-modal').classList.remove('open');
+}
+
 ['camp-region','camp-source','camp-score','camp-status'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', updateCampaignCount);
   document.getElementById(id)?.addEventListener('change', updateCampaignCount);
