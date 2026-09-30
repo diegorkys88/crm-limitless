@@ -93,7 +93,8 @@ def delete_contact(
 ):
     """
     Delete a contact and all their related records.
-    Removes outreach, appointments, and sync logs first (foreign keys).
+    Removes outreach, appointments, sync logs, agent logs, and campaign
+    recipients first (foreign keys) so the contact can be deleted cleanly.
     """
     contact = db.query(Contact).filter(Contact.id == contact_id).first()
     if not contact:
@@ -108,6 +109,13 @@ def delete_contact(
         db.query(AgentLog).filter(AgentLog.contact_id == contact_id).delete()
     except Exception:
         pass  # AgentLog may not have contact_id in all versions
+
+    # Campaign recipients reference contacts too — remove those links
+    try:
+        from database import CampaignRecipient
+        db.query(CampaignRecipient).filter(CampaignRecipient.contact_id == contact_id).delete()
+    except Exception:
+        pass  # CampaignRecipient table may not exist in older deployments
 
     db.delete(contact)
     db.commit()
