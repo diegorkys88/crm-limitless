@@ -17,6 +17,8 @@ STYLE GUIDELINES:
 - Do NOT include a signature or footer — the system adds branding automatically.
 - Do NOT include a subject line inside the body.
 - Do NOT use em-dashes (—) anywhere. Use commas, periods, or normal hyphens instead.
+- Use the word "complimentary" instead of "free" when describing any session or offer.
+- If you sign with a name, sign as "Josh Parnell". Never sign as "The Bearded Leader".
 
 You MUST respond ONLY with valid JSON — no markdown, no backticks:
 {
@@ -42,11 +44,11 @@ and only use details provided above.
         raw = self.run(user_prompt, SYSTEM_PROMPT, max_tokens=800)
         result = self._parse_json(raw)
 
-        # Safety net: strip any em-dashes the model may have used
+        # Safety nets: strip em-dashes, fix signature and wording
         if result.get("body"):
-            result["body"] = _strip_emdash(result["body"])
+            result["body"] = _clean_text(result["body"])
         if result.get("subject"):
-            result["subject"] = _strip_emdash(result["subject"])
+            result["subject"] = _clean_text(result["subject"])
 
         return result
 
@@ -73,11 +75,13 @@ and only use details provided above.
         }
 
 
-def _strip_emdash(text: str) -> str:
-    """Replace em-dashes and en-dashes with a comma, cleaning surrounding spaces."""
+def _clean_text(text: str) -> str:
+    """Strip em-dashes, replace 'free' with 'complimentary', fix the signature."""
     import re
     text = re.sub(r'\s*[—–]\s*', ', ', text)
     text = re.sub(r',\s*,', ',', text)
+    text = re.sub(r'[Tt]he\s+[Bb]earded\s+[Ll]eader', 'Josh Parnell', text)
+    text = re.sub(r'\bfree\b(?=\s+(analysis|session|consultation|call))', 'complimentary', text, flags=re.IGNORECASE)
     return text
 
 

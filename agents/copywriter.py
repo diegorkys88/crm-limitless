@@ -8,7 +8,7 @@ Your job is to write a personalized outreach email for each prospect.
 
 COMPANY CONTEXT:
 - We offer leadership coaching for executives in the automotive industry
-- The first step is a FREE analysis session (no commitment)
+- The first step is a COMPLIMENTARY analysis session (no commitment)
 - We help companies improve leadership retention, team performance, and results
 
 WRITING RULES:
@@ -19,6 +19,8 @@ WRITING RULES:
 - End with a clear call to action using the Calendly link provided
 - Do NOT use buzzwords like "synergy", "leverage", "game-changer"
 - Do NOT use em-dashes (—) anywhere. Use commas, periods, or normal hyphens instead.
+- Use the word "complimentary" instead of "free" when describing the analysis session.
+- If you sign the email with a name, sign as "Josh Parnell". Never sign as "The Bearded Leader".
 
 You MUST respond ONLY with a valid JSON object — no markdown, no backticks, no extra text.
 Format:
@@ -53,23 +55,28 @@ Include this Calendly link in the call to action: {calendly_link}
                 "body": raw
             }
 
-        # Safety net: strip any em-dashes the model may have used
+        # Safety nets: strip em-dashes, fix signature and wording
         if result.get("body"):
-            result["body"] = _strip_emdash(result["body"])
+            result["body"] = _clean_text(result["body"])
         if result.get("subject"):
-            result["subject"] = _strip_emdash(result["subject"])
+            result["subject"] = _clean_text(result["subject"])
 
         self.log(db, contact.id, "generated_email", profile, raw)
         return result
 
 
-def _strip_emdash(text: str) -> str:
-    """Replace em-dashes and en-dashes with a comma, cleaning surrounding spaces."""
+def _clean_text(text: str) -> str:
+    """Strip em-dashes, replace 'free' with 'complimentary', fix the signature."""
     import re
-    # Replace " — " or "—" (and en-dash –) with ", "
+    # Em-dashes → comma
     text = re.sub(r'\s*[—–]\s*', ', ', text)
-    # Avoid doubled commas if the model already had one nearby
     text = re.sub(r',\s*,', ',', text)
+    # Signature: The Bearded Leader → Josh Parnell (any case)
+    text = re.sub(r'[Tt]he\s+[Bb]earded\s+[Ll]eader', 'Josh Parnell', text)
+    # "free analysis session" → "complimentary analysis session" (case-insensitive on "free")
+    text = re.sub(r'\bfree\b(?=\s+analysis)', 'complimentary', text, flags=re.IGNORECASE)
+    # Also catch "free session" and "free consultation"
+    text = re.sub(r'\bfree\b(?=\s+(session|consultation|call))', 'complimentary', text, flags=re.IGNORECASE)
     return text
 
 

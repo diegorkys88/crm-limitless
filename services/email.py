@@ -26,14 +26,22 @@ WEBSITE = "https://limitlessleadership.co/"
 
 def strip_emdash(text: str) -> str:
     """
-    Replace em-dashes (—) and en-dashes (–) with a comma.
-    Cleans up surrounding spaces and avoids doubled commas.
-    This runs on every email so no dash slips through, even from manual edits.
+    Clean outgoing email text. Runs on every email (subject + body) so nothing
+    slips through, even from manual edits:
+      - em/en-dashes (—, –) become a comma
+      - "The Bearded Leader" signature becomes "Josh Parnell"
+      - "free analysis/session/consultation/call" becomes "complimentary ..."
     """
     if not text:
         return text
+    # Dashes → comma
     text = re.sub(r'\s*[—–]\s*', ', ', text)
     text = re.sub(r',\s*,', ',', text)
+    # Signature fix
+    text = re.sub(r'[Tt]he\s+[Bb]earded\s+[Ll]eader', 'Josh Parnell', text)
+    # free → complimentary (only before session-type words, keeps other uses of "free")
+    text = re.sub(r'\bfree\b(?=\s+(analysis|session|consultation|call))',
+                  'complimentary', text, flags=re.IGNORECASE)
     return text
 
 
@@ -74,7 +82,7 @@ def build_email_html(body: str, sender_name: str = "The Limitless Leadership Tea
             <td align="center">
               <a href="{calendly_url}"
                  style="display:inline-block;background-color:#00187d;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;padding:14px 36px;border-radius:4px;letter-spacing:0.5px">
-                Book a Free Discovery Call
+                Book a Complimentary Discovery Call
               </a>
             </td>
           </tr>
@@ -178,7 +186,7 @@ class EmailService:
         sender = sender_name or EMAIL_FROM_NAME
         body   = body.replace("[Your Name]", sender).replace("[YOUR NAME]", sender)
 
-        # Final safety net: remove em-dashes from subject and body before sending
+        # Final safety net: clean subject and body before sending
         subject = strip_emdash(subject)
         body    = strip_emdash(body)
 
